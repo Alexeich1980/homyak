@@ -1,0 +1,8 @@
+{
+  "appId": "ru.dorokhin.homyak",
+  "appName": "Хомяк",
+  "webDir": "www",
+  "android": {
+    "androidScheme": "https"
+  }
+}

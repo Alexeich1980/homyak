@@ -1,0 +1,89 @@
+apply plugin: 'com.android.application'
+
+// Ключ подписи «Хомяка». Лежит вне репозитория (keys/ в .gitignore): debug-ключ
+// общеизвестен, APK на нём отлаживаемый, а его протухание делает обновление поверх
+// невозможным - только удаление приложения вместе со всеми данными.
+// Если ключа нет, релизная конфигурация не создаётся и сборка честно падает,
+// а build-apk.js откатывается на debug с громким предупреждением.
+def keystorePropsFile = rootProject.file('../keys/homyak.properties')
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+def hasReleaseKey = keystorePropsFile.exists() && rootProject.file('../keys/' + (keystoreProps['storeFile'] ?: 'homyak.jks')).exists()
+
+android {
+    namespace "ru.dorokhin.budgetphone"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "ru.dorokhin.homyak"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 20003
+        versionName "1.0.1"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // Стор-сборка (build-apk.js --store передаёт -PhomyakStore=true): MainActivity на старте
+        // забывает путь к скачанной веб-сборке - код меняется только через RuStore.
+        resValue "bool", "homyak_store", (project.findProperty('homyakStore') == 'true') ? 'true' : 'false'
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        if (hasReleaseKey) {
+            release {
+                storeFile rootProject.file('../keys/' + (keystoreProps['storeFile'] ?: 'homyak.jks'))
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            if (hasReleaseKey) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+}
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+    testImplementation "junit:junit:$junitVersion"
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    implementation project(':capacitor-cordova-android-plugins')
+
+    // RuStore Pay SDK — разовая непотребляемая покупка «Полного доступа» (см. RuStorePayPlugin.java).
+    // BOM фиксирует согласованные версии модулей SDK; артефакт pay — сам Pay SDK (11.1.0 в этом BOM).
+    // Репозиторий RuStore добавлен в android/build.gradle. SDK 64-битный (arm64-v8a/x86_64) и не тянет
+    // запрещённых RuStore permissions (INTERNET/ACCESS_NETWORK_STATE — штатные для платежей).
+    implementation platform('ru.rustore.sdk:bom:2026.08.01')
+    implementation 'ru.rustore.sdk:pay'
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

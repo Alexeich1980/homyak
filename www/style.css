@@ -1,0 +1,1905 @@
+/* style.css — «Хомяк». Две темы одного макета:
+   light = 2a «Пастель» (Manrope), dark = 2b «Мята ночью» (Nunito Sans).
+   Компоненты не знают цветов — только переменные из блоков ниже. */
+
+/* ---------- шрифты (офлайн, локальные woff2) ---------- */
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/manrope-cyrillic-600.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/manrope-cyrillic-700.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 800; font-display: swap; src: url(fonts/manrope-cyrillic-800.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/manrope-latin-600.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/manrope-latin-700.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 800; font-display: swap; src: url(fonts/manrope-latin-800.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+/* ₽ (U+20BD) живёт в latin-ext — без этой подрезки рубль сваливался бы в системный шрифт */
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/manrope-latin-ext-600.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/manrope-latin-ext-700.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Manrope'; font-style: normal; font-weight: 800; font-display: swap; src: url(fonts/manrope-latin-ext-800.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/nunito-sans-cyrillic-600.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/nunito-sans-cyrillic-700.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url(fonts/nunito-sans-cyrillic-800.woff2) format('woff2'); unicode-range: U+0301,U+0400-045F,U+0490-0491,U+04B0-04B1,U+2116; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/nunito-sans-latin-600.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/nunito-sans-latin-700.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url(fonts/nunito-sans-latin-800.woff2) format('woff2'); unicode-range: U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 600; font-display: swap; src: url(fonts/nunito-sans-latin-ext-600.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url(fonts/nunito-sans-latin-ext-700.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+@font-face { font-family: 'Nunito Sans'; font-style: normal; font-weight: 800; font-display: swap; src: url(fonts/nunito-sans-latin-ext-800.woff2) format('woff2'); unicode-range: U+0100-02BA,U+02BD-02C5,U+02C7-02CC,U+02CE-02D7,U+02DD-02FF,U+0304,U+0308,U+0329,U+1D00-1DBF,U+1E00-1E9F,U+1EF2-1EFF,U+2020,U+20A0-20AB,U+20AD-20C0,U+2113,U+2C60-2C7F,U+A720-A7FF; }
+
+/* ---------- токены: 2b «Мята ночью» (тёмная, по умолчанию) ---------- */
+:root,
+body[data-theme="dark"] {
+  --font: 'Nunito Sans', 'Segoe UI', Roboto, -apple-system, sans-serif;
+
+  --bg: #0F1F24;
+  --bg-img: radial-gradient(120% 60% at 50% -10%, #1B4A4A 0%, #0F1F24 60%);
+  --surface: rgba(255,255,255,.05);
+  --surface-bd: rgba(255,255,255,.08);
+  --sheet: #172C32;
+  --hairline: rgba(255,255,255,.07);
+  --tile-neutral: rgba(255,255,255,.08);
+  --track: rgba(255,255,255,.10);
+  /* Край плитки. Без него круг на тёмном фоне «растворяется»: при 0 % не видно, что
+     это вообще круг. Тонкая светлая грань + мягкая тень отделяют плитку от подложки. */
+  --tile-bd: rgba(255,255,255,.10);
+  --tile-shadow: 0 2px 8px rgba(0,0,0,.35);
+  /* приподнятая тень: под пальцем и под целью переноса плитка не только растёт, но и
+     «отрывается» от подложки - иначе рост читается как дрожание, а не как отклик */
+  --tile-shadow-up: 0 6px 18px rgba(0,0,0,.5);
+  --accent-soft: rgba(62,210,176,.45);
+  --shadow-card: none;
+  --shadow-up: 0 -8px 30px rgba(0,0,0,.45);
+  --dim: rgba(0,10,15,.6);
+
+  --text: #E6F2EF;
+  --secondary: #B8CDC9;
+  --muted: #86A3A0;
+  --name: #B8CDC9;
+
+  --accent: #3ED2B0;
+  --accent-ink: #0F1F24;
+  --avatar-bg: #3ED2B0;
+  --avatar-glow: 0 0 18px rgba(62,210,176,.45);
+
+  --wallet: #F5CF4B;
+  --wallet-ink: #3A2E05;
+  --wallet-glow: 0 0 16px rgba(245,207,75,.2), 0 2px 8px rgba(0,0,0,.35);
+  --wallet-glow-up: 0 0 22px rgba(245,207,75,.32), 0 6px 18px rgba(0,0,0,.5);
+
+  --lv-none: rgba(255,255,255,.08);
+  --lv-ok: #3ED2B0;
+  --lv-warn: #F2C85B;
+  --lv-over: #F27B6A;
+  --lv-inc: #7FE0C6;
+  --num-none: #86A3A0;
+  --num-ok: #3ED2B0;
+  --num-warn: #F2C85B;
+  --num-over: #F27B6A;
+  --num-inc: #7FE0C6;
+
+  --tint-0: rgba(255,255,255,.05); --tint-1: rgba(255,255,255,.05); --tint-2: rgba(255,255,255,.05);
+  --tint-3: rgba(255,255,255,.05); --tint-4: rgba(255,255,255,.05); --tint-5: rgba(255,255,255,.05);
+  --hue-0: #3ED2B0; --hue-1: #F27B6A; --hue-2: #B18CF2;
+  --hue-3: #5FB2F0; --hue-4: #F2C85B; --hue-5: #F28BC0;
+
+  --ring: 54px;
+  --ring-r: 50%;
+  --ico-size: 28px;
+  --dot: #2E464C;
+  --dot-on: #3ED2B0;
+
+  --btn-ghost: rgba(255,255,255,.06);
+  --btn-ghost-bd: rgba(255,255,255,.10);
+  --btn-h: 44px;
+  --btn-r: 14px;
+  --sh-pad: 18px;
+  --sm-pad: 12px;
+  --seg-r: 999px;
+  --seg-bg: rgba(255,255,255,.06);
+
+  --keys: #0C191D;
+  --key: rgba(255,255,255,.06);
+  --key-op: rgba(255,255,255,.03);
+  --key-a: rgba(255,255,255,.14);
+}
+
+/* ---------- токены: 2a «Пастель» (светлая) ---------- */
+body[data-theme="light"] {
+  --font: 'Manrope', 'Segoe UI', Roboto, -apple-system, sans-serif;
+
+  /* подложка заметно темнее и холоднее белых карточек: на телефоне при 0.2.1 блоки
+     с иконками сливались с фоном - разница была всего в пару процентов яркости */
+  --bg: #E9E7F2;
+  --bg-img: none;
+  --surface: #FFFFFF;
+  --surface-bd: transparent;
+  --sheet: #FFFFFF;
+  --hairline: #F1F0F7;
+  --tile-neutral: #ECEAF5;
+  --track: #F1F0F7;
+  --tile-bd: rgba(46,43,69,.08);
+  --tile-shadow: 0 2px 10px rgba(60,55,100,.10);
+  --tile-shadow-up: 0 6px 18px rgba(60,55,100,.20);
+  --accent-soft: rgba(46,43,69,.16);
+  --shadow-card: 0 4px 16px rgba(60,55,100,.06);
+  --shadow-up: 0 -8px 30px rgba(60,55,100,.14);
+  --dim: rgba(46,43,69,.4);
+
+  --text: #2E2B45;
+  --secondary: #2E2B45;
+  /* приглушённый на потемневшей подложке дотянут до 3.5:1 (было 3.2 на #F4F3FA) */
+  --muted: #7A7796;
+  --name: #2E2B45;
+
+  --accent: #2E2B45;
+  --accent-ink: #FFFFFF;
+  --avatar-bg: #8FB7F5;
+  --avatar-glow: none;
+
+  --wallet: #F6D365;
+  --wallet-ink: #4A3706;
+  --wallet-glow: 0 2px 10px rgba(60,55,100,.10);
+  --wallet-glow-up: 0 6px 18px rgba(60,55,100,.20);
+
+  --lv-none: #ECEAF5;
+  --lv-ok: #7FC8A9;
+  --lv-warn: #F5C36B;
+  --lv-over: #F08A7E;
+  --lv-inc: #8FB7F5;
+  --num-none: #8B88A6;
+  --num-ok: #3E9A73;
+  --num-warn: #C98A1E;
+  --num-over: #D9584A;
+  --num-inc: #4A86D9;
+
+  --tint-0: #E3F3EC; --tint-1: #FDE6E3; --tint-2: #EBE6FB;
+  --tint-3: #E4EDFC; --tint-4: #FDF1DC; --tint-5: #FCE6EF;
+  --hue-0: #7FC8A9; --hue-1: #F08A7E; --hue-2: #B9A8F0;
+  --hue-3: #8FB7F5; --hue-4: #F5C36B; --hue-5: #F0A6C8;
+
+  --ring: 54px;
+  --ring-r: calc(var(--ring) * .315);   /* 17 px при кольце 54 — держим пропорцию */
+  --ico-size: 28px;
+  --dot: #D9D6E8;
+  --dot-on: #2E2B45;
+
+  --btn-ghost: #F4F3FA;
+  --btn-ghost-bd: transparent;
+  --btn-h: 46px;
+  --btn-r: 16px;
+  --sh-pad: 20px;
+  --sm-pad: 14px;
+  --seg-r: 16px;
+  /* дорожка сегмента - отдельный от листа (#FFFFFF) серый, иначе неактивная вкладка
+     и подложка сливаются с белым листом, а видна лишь рамка (пустой «ободок») */
+  --seg-bg: #E9ECF2;
+
+  --keys: #ECEAF5;
+  --key: #FFFFFF;
+  --key-op: #F4F3FA;
+  --key-a: #DCD9EC;
+}
+
+/* уровень заполнения: одна семья классов задаёт и цвет заливки, и цвет числа */
+.lvl-none { --lv: var(--lv-none); --num: var(--num-none); }
+.lvl-ok   { --lv: var(--lv-ok);   --num: var(--num-ok); }
+.lvl-warn { --lv: var(--lv-warn); --num: var(--num-warn); }
+.lvl-over { --lv: var(--lv-over); --num: var(--num-over); }
+.lvl-inc  { --lv: var(--lv-inc);  --num: var(--num-inc); }
+.lvl-wallet { --lv: var(--wallet); --num: var(--wallet-ink); }
+
+/* Кольцо вокруг цели переноса. В тёмной теме это мятный акцент - он читается на любой
+   плитке. В светлой акцент почти чёрный и выглядит как обводка ошибки, поэтому там
+   кольцо берёт собственный цвет уровня плитки, разбавленный до подсветки. */
+body[data-theme="light"] .lvl-none { --accent-soft: rgba(139,136,166,.38); }
+body[data-theme="light"] .lvl-ok   { --accent-soft: rgba(127,200,169,.60); }
+body[data-theme="light"] .lvl-warn { --accent-soft: rgba(245,195,107,.60); }
+body[data-theme="light"] .lvl-over { --accent-soft: rgba(240,138,126,.60); }
+body[data-theme="light"] .lvl-inc  { --accent-soft: rgba(143,183,245,.60); }
+body[data-theme="light"] .wcard    { --accent-soft: rgba(var(--wc-rgb), .85); }
+/* ---------- палитра кошельков ----------
+   Десять пресетов, у каждого мягкий градиент из двух остановок и свой цвет чернил
+   (тёмные на светлых, светлые на графите/синем/фиолетовом/красном). Тёмная тема берёт
+   те же тона чуть насыщеннее, светлая - чуть мягче: карточка не должна кричать. */
+.wc-yellow   { --wc-a: #F7D774; --wc-b: #F0BE3A; --wc-ink: #3A2E05; --wc-rgb: 245,207,75; }
+.wc-red      { --wc-a: #F08A80; --wc-b: #DE5B4E; --wc-ink: #FFF3F1; --wc-rgb: 240,138,126; }
+.wc-green    { --wc-a: #8ED9AE; --wc-b: #4FB585; --wc-ink: #0C2B1C; --wc-rgb: 127,200,169; }
+.wc-blue     { --wc-a: #7FB0F2; --wc-b: #4A80DB; --wc-ink: #F1F6FF; --wc-rgb: 143,183,245; }
+.wc-white    { --wc-a: #FFFFFF; --wc-b: #E4E2EE; --wc-ink: #2E2B45; --wc-rgb: 226,224,238; }
+.wc-orange   { --wc-a: #F9B872; --wc-b: #ED8F3A; --wc-ink: #3A2205; --wc-rgb: 246,160,80; }
+.wc-purple   { --wc-a: #B39BEF; --wc-b: #8564D8; --wc-ink: #F6F2FF; --wc-rgb: 177,140,242; }
+.wc-teal     { --wc-a: #79DDCB; --wc-b: #35B5A2; --wc-ink: #062A26; --wc-rgb: 62,210,176; }
+.wc-pink     { --wc-a: #F5A8CB; --wc-b: #E276A9; --wc-ink: #3B0E27; --wc-rgb: 242,139,192; }
+.wc-graphite { --wc-a: #6B7480; --wc-b: #454C57; --wc-ink: #F2F5F8; --wc-rgb: 107,116,128; }
+
+body[data-theme="light"] .wc-yellow   { --wc-a: #F9DE8C; --wc-b: #F3C752; --wc-ink: #4A3706; }
+body[data-theme="light"] .wc-red      { --wc-a: #F6A79E; --wc-b: #EC7A6C; --wc-ink: #4A100A; }
+body[data-theme="light"] .wc-green    { --wc-a: #A6E3C1; --wc-b: #71C79C; --wc-ink: #10331F; }
+body[data-theme="light"] .wc-blue     { --wc-a: #A6C7F8; --wc-b: #7BA5EC; --wc-ink: #10254A; }
+body[data-theme="light"] .wc-white    { --wc-a: #FFFFFF; --wc-b: #EFEDF7; --wc-ink: #2E2B45; }
+body[data-theme="light"] .wc-orange   { --wc-a: #FBCC98; --wc-b: #F2A75C; --wc-ink: #46280A; }
+body[data-theme="light"] .wc-purple   { --wc-a: #C8B6F5; --wc-b: #A38BE8; --wc-ink: #26134F; }
+body[data-theme="light"] .wc-teal     { --wc-a: #9BE7DA; --wc-b: #5FCCB8; --wc-ink: #08332D; }
+body[data-theme="light"] .wc-pink     { --wc-a: #F9C2DB; --wc-b: #EE96BE; --wc-ink: #4A1731; }
+body[data-theme="light"] .wc-graphite { --wc-a: #7C848F; --wc-b: #59606B; --wc-ink: #F7F9FB; }
+
+/* свечение и кольцо цели берут цвет самой карточки, а не общий жёлтый */
+body[data-theme="dark"] .wcard, body[data-theme="dark"] .sh-ico.wallet {
+  --wallet-glow: 0 0 16px rgba(var(--wc-rgb), .2), 0 2px 8px rgba(0,0,0,.35);
+  --wallet-glow-up: 0 0 22px rgba(var(--wc-rgb), .32), 0 6px 18px rgba(0,0,0,.5);
+}
+
+
+/* тинты плиток по индексу категории */
+.t0 { --tint: var(--tint-0); --hue: var(--hue-0); }
+.t1 { --tint: var(--tint-1); --hue: var(--hue-1); }
+.t2 { --tint: var(--tint-2); --hue: var(--hue-2); }
+.t3 { --tint: var(--tint-3); --hue: var(--hue-3); }
+.t4 { --tint: var(--tint-4); --hue: var(--hue-4); }
+.t5 { --tint: var(--tint-5); --hue: var(--hue-5); }
+
+/* ---------- база ---------- */
+html, body {
+  height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent; user-select: none;
+}
+body {
+  background: var(--bg); background-image: var(--bg-img);
+  background-attachment: fixed; color: var(--text);
+  font-family: var(--font);
+  font-size: 14px; line-height: 1.35;
+  -webkit-font-smoothing: antialiased;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; background: none; border: 0; margin: 0; cursor: pointer; }
+::-webkit-scrollbar { width: 0; height: 0; }
+
+/* Свободную высоту раздаёт поровну UI.balanceGaps() через --fgap (8…28 px);
+   всё, что осталось сверх 28, лежит внизу — блоки не расползаются к краям. */
+#app {
+  display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
+  gap: var(--fgap, 8px);
+  padding-top: calc(env(safe-area-inset-top) + 14px);
+  /* нижний зазор: последний блок (карточка расходов) не лежит вплотную к краю экрана.
+     Минимум 10 px даже без системного выреза, с вырезом — чуть больше. Ровно 10, а не
+     больше: на тесном 360×760 сетка расходов флашится по низу, и лишние пиксели тут
+     стоили бы четвёртого ряда (проверено — 10 держит 4 ряда, 12 роняет до трёх). */
+  padding-bottom: max(10px, calc(env(safe-area-inset-bottom) + 8px));
+}
+
+/* Полоса «данные не сохраняются» — единственное, что не уезжает само:
+   пока запись не пройдёт, хозяин должен её видеть. */
+#saveWarn {
+  flex: 0 0 auto; margin: 0 12px; padding: 9px 12px; border-radius: 12px;
+  background: var(--lv-over); color: #FFFFFF; font-size: 13px; font-weight: 700;
+  line-height: 1.35;
+}
+
+/* ---------- шапка ---------- */
+#top {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 0 12px;
+}
+/* Шапка выросла: сводка 56 px вместо 44, числа 15 px вместо 13. Хомяк и кнопка
+   аналитики держат ту же высоту - ряд читается одной планкой, а не тремя разными
+   кубиками. Радиусы подняты пропорционально (16 → 18). */
+.avatar {
+  flex: 0 0 56px; width: 56px; height: 56px; border-radius: 50%;
+  overflow: hidden; background: var(--avatar-bg); box-shadow: var(--avatar-glow);
+  padding: 0; display: grid; place-items: center;
+}
+/* Хомяк - прозрачный PNG 256×256. Раньше его растягивали на весь круг с scale(1.25) и
+   срезали уши; теперь вписываем целиком примерно в 80 % круга - в обеих темах. */
+.avatar img { width: 80%; height: 80%; object-fit: contain; display: block; }
+
+#sums {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center;
+  height: 56px; box-sizing: border-box;
+  background: var(--surface); border: 1px solid var(--surface-bd);
+  border-radius: 18px; padding: 6px 4px; box-shadow: var(--shadow-card);
+  cursor: pointer;
+}
+#sums:active { filter: brightness(.97); }
+/* поля колонки срезаны до 1 px: подпись «В кошельках» на 10 px и 360-точечном экране
+   не влезала в колонку буквально на пару пикселей и обрывалась многоточием */
+.sum { flex: 1 1 0; min-width: 0; text-align: center; padding: 0 1px; }
+.sum + .sum { border-left: 1px solid var(--hairline); }
+.sl { font-size: 10px; line-height: 1.25; font-weight: 700; letter-spacing: -.2px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv { font-size: 15px; line-height: 1.3; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#sumSpent .sv { color: var(--num-over); }
+#sumRemaining .sv { color: var(--num-ok); }
+#sumRemaining .sv.neg, #sumBalance .sv.neg { color: var(--num-over); }
+/* «Осталось» без единого лимита: значения нет - серое «—», не отрицательное красное */
+#sumRemaining .sv.none { color: var(--muted); }
+
+/* Столбики аналитики в шапке: три цвета уровней заливки (уложился / впритык /
+   перебор). Цвета берутся из токенов темы, поэтому работают и в светлой, и в тёмной. */
+.ic-bars .b1 { stroke: var(--lv-ok); }
+.ic-bars .b2 { stroke: var(--lv-warn); }
+.ic-bars .b3 { stroke: var(--lv-over); }
+
+.hbtn {
+  flex: 0 0 36px; width: 36px; height: 36px; border-radius: 12px;
+  display: grid; place-items: center; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--surface-bd);
+}
+.hbtn:active { color: var(--text); }
+/* Кнопка аналитики стоит в одном ряду со сводкой и раньше была ниже неё на 8-10 px:
+   ряд выглядел разъехавшимся. Тянем её по высоте соседа (align-self перебивает
+   align-items: center у #top) и берём радиус сводки, а не мелкой кнопки. */
+#btnSummary { align-self: stretch; height: auto; flex: 0 0 56px; width: 56px; border-radius: 18px; }
+/* Под затемняющим листом/меню верхние кнопки не должны отбрасывать смещённую тень:
+   под скримом её сдвиг (y+4) читается как вторая, съехавшая обводка-дуга у правого края.
+   Гасим тень, пока открыт лист (#dlgBg / карточка #cardBg / меню #menuBg / перевод #trBg).
+   :has поддержан в актуальных WebView; где нет - правило игнорируется, регресса нет.
+   В тёмной теме у кнопок тени и так нет, так что это касается только светлой. */
+body:has(#dlgBg:not([hidden])) #sums,
+body:has(#cardBg:not([hidden])) #sums,
+body:has(#menuBg:not([hidden])) #sums,
+body:has(#trBg:not([hidden])) #sums,
+body:has(#dlgBg:not([hidden])) #btnSummary,
+body:has(#cardBg:not([hidden])) #btnSummary,
+body:has(#menuBg:not([hidden])) #btnSummary,
+body:has(#trBg:not([hidden])) #btnSummary { box-shadow: none; }
+
+/* строка месяца: показываем, только когда смотрим не текущий месяц */
+#topMonth {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 0 12px; padding: 6px 10px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--surface-bd);
+  font-size: 12px; font-weight: 700; color: var(--text);
+}
+#topMonth:empty { display: none; }
+.tm-back {
+  min-height: 32px; padding: 0 12px; border-radius: 10px;
+  background: var(--btn-ghost); border: 1px solid var(--btn-ghost-bd);
+  color: var(--text); font-size: 12px; font-weight: 700;
+  display: inline-flex; align-items: center;
+}
+.tm-back:active { opacity: .8; }
+
+/* ---------- поля ---------- */
+/* overflow: visible — обязательное условие. Нажатая плитка растёт до 1.06, цель
+   переноса до 1.10; при overflow: hidden карточка срезала им бок и верх. Ленту
+   с прокруткой (.pages / .strip) обрезать по-прежнему нужно, поэтому запас под
+   рост даём отступом ВНУТРИ ленты. */
+.pane {
+  margin: 0 12px; padding: 4px 4px 2px; border-radius: 22px;
+  background: var(--surface); border: 1px solid var(--surface-bd);
+  box-shadow: var(--shadow-card); overflow: visible;
+  display: flex; flex-direction: column;
+}
+#fieldInc { flex: 0 0 auto; }
+/* Свёрнутые доходы - это ОДНА строка заголовка, а не пустое место: сам блок остаётся
+   на экране (по нему и разворачивают обратно), а высоту отдаёт сетке расходов. */
+#fieldInc .inc-body { overflow: hidden; }
+/* Свёрнутое состояние без display:none: блок остаётся измеримым, и его можно плавно
+   развернуть с нуля. Высоту забирают max-height:0 + прозрачность (overflow уже выше). */
+#fieldInc.collapsed .inc-body { max-height: 0; opacity: 0; }
+/* Плавное сворачивание: анимируем max-height и прозрачность (высота измеряется один
+   раз в toggleIncome и фиксируется inline). Класс висит ТОЛЬКО на время перехода:
+   постоянный transition дёргал бы поле на каждой обычной перерисовке (смена месяца,
+   новая операция). Сетка расходов пересчитывает ряды уже ПОСЛЕ перехода. */
+#fieldInc.inc-anim .inc-body {
+  transition: max-height .26s cubic-bezier(.4, 0, .2, 1), opacity .26s cubic-bezier(.4, 0, .2, 1);
+  will-change: max-height, opacity;
+}
+/* карточка расходов сжимается по содержимому: ровно четыре ряда, не больше */
+#fieldExp { flex: 0 0 auto; min-height: 0; }
+#fieldWallets { flex: 0 0 auto; margin: 0 12px; overflow: visible; }
+
+.ph-t {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; color: var(--muted);
+  padding: 0 10px 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* Заголовок доходов - кнопка, а не подпись: галочка справа и отклик на палец говорят,
+   что по нему нажимают. Мишень тянем на всю ширину карточки - в неё легко попасть.
+   Галочка вынута из потока (position: absolute) НАМЕРЕННО: строка заголовка обязана
+   остаться той же высоты, что у расходов, иначе на 360×760 у сетки отнимается ряд. */
+.ph-btn {
+  position: relative; display: block; width: 100%; text-align: left;
+  padding: 0 26px 5px 10px; border-radius: 12px;
+}
+.ph-btn .ph-l { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Галочка = состояние поля. SVG нарисован «вниз» (∨): развёрнутое поле поворачивает
+   его на 180° (вверх, ∧), свёрнутое оставляет как есть (вниз). Крутится синхронно с
+   высотой блока (те же 260 мс), поэтому класс перехода вешаем ещё на старте. */
+.ph-chev {
+  position: absolute; right: 6px; top: 0; width: 14px; height: 14px;
+  display: grid; place-items: center; color: var(--muted);
+  transition: transform .26s cubic-bezier(.4, 0, .2, 1), color .2s ease;
+  transform: rotate(180deg);
+}
+#fieldInc.collapsed .ph-chev,
+#fieldInc.inc-collapsing .ph-chev { transform: rotate(0deg); }
+#fieldInc.inc-expanding .ph-chev { transform: rotate(180deg); }
+.ph-btn:active { color: var(--text); background: var(--btn-ghost); }
+.ph-btn:active .ph-chev { color: var(--text); }
+
+/* ленты страниц */
+.pages {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+  flex: 0 0 auto; min-height: 0; scrollbar-width: none;
+  /* 6 px сверху и снизу — запас, в который вырастает плитка под пальцем: лента
+     режет содержимое по своей рамке, и без него верхний и нижний ряды срезало */
+  padding: 7px 0;
+}
+.page {
+  min-width: 100%; scroll-snap-align: start;
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-auto-rows: max-content; gap: 6px 2px; align-content: start;
+  /* по бокам запас нужен меньший: кольцо уже колонки и стоит по её центру, свободных
+     полей там больше десяти пикселей — угловой плитке хватает и на рост до 1.10 */
+  padding: 0 2px; overflow: visible;
+}
+#fieldInc .page { gap: 0 2px; }
+
+.dots { display: flex; justify-content: center; align-items: center; gap: 5px; }
+.dots-b { flex: 0 0 auto; padding: 4px 0 0; min-height: 13px; }
+#incDots { padding: 5px 0 0; }
+#incDots:empty { display: none; }
+/* точки под лентой кошельков: тот же компонент, но у ленты нет своей карточки —
+   отступ сверху даём сами, а без второй страницы строка исчезает целиком */
+.dots-w { flex: 0 0 auto; padding: 9px 0 0; }
+#walDots:empty { display: none; }
+.dots i {
+  position: relative; width: 5px; height: 5px; border-radius: 3px;
+  background: var(--dot); display: block; transition: width .2s ease, background .2s ease;
+}
+.dots i.on { width: 14px; background: var(--dot-on); }
+/* точка - ещё и кнопка «листнуть на эту страницу»: сам кружок 5 px нажать нечем,
+   поэтому область касания растягиваем невидимым полем вокруг него */
+.dots i::after { content: ''; position: absolute; inset: -7px -6px; }
+
+/* ---------- плитка категории ---------- */
+.circle { text-align: center; touch-action: pan-x; min-width: 0; }
+
+.ring {
+  position: relative; width: var(--ring); height: var(--ring); margin: 0 auto;
+  border-radius: var(--ring-r); overflow: hidden;
+  background: var(--tint, var(--tile-neutral));
+  /* Грань рисуем внутренней тенью, а не border: настоящая рамка ужала бы .tarc
+     (он inset: 0) на 2 px, и кольцо перестало бы совпадать с r = 24.75 из вёрстки. */
+  box-shadow: inset 0 0 0 1px var(--tile-bd), var(--tile-shadow);
+  /* .18s - это возврат в покой после отпускания; рост вперёд короче и задаётся
+     в правилах .is-pressed / .is-target ниже */
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.tfill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 100%;
+  background: var(--lv); transform: scaleY(0); transform-origin: bottom;
+  transition: transform .45s cubic-bezier(.2,.8,.2,1);
+}
+.tarc { position: absolute; inset: 0; width: 100%; height: 100%; display: block; transform: rotate(-90deg); }
+/* Толщина обводки, радиус и длина окружности приходят из Engine.ringGeom:
+   в вёрстке нет ни 4.5, ни 24.75, ни 155.51 — всё считается от размера кольца. */
+.tarc .trk { fill: none; stroke: var(--track); stroke-width: var(--arc-sw, 4.5); }
+.tarc .arc {
+  fill: none; stroke: var(--lv); stroke-width: var(--arc-sw, 4.5); stroke-linecap: butt;
+  transition: stroke-dashoffset .45s cubic-bezier(.2,.8,.2,1);
+}
+.tin { position: absolute; inset: var(--arc-in, 4.5px); border-radius: 50%; background: var(--sheet); }
+.ring .ico { position: absolute; inset: 0; display: grid; place-items: center; }
+.ring .ico svg { width: var(--ico-size); height: var(--ico-size); stroke-width: 1.8; }
+body[data-theme="light"] .ring .ico svg { stroke-width: 1.9; }
+
+/* Цветная иллюстрация доходов и расходов. Картинка - часть плитки, а не отдельная
+   мишень: пальцем её не подхватить и не «сохранить как», масштаб плитки (is-pressed,
+   is-target) она берёт вместе с кольцом. Источник 128 px на коробку ≤ 44 css px -
+   на 2× экране запаса хватает, поэтому сглаживание обычное, без пиксельных фокусов. */
+.ico-img {
+  display: block; image-rendering: auto; pointer-events: none;
+  -webkit-user-drag: none; user-select: none; -webkit-user-select: none;
+}
+/* коробка картинки крупнее глифа (у иллюстрации свои поля) — размер даёт applyRingVars */
+.ring .ico img { width: var(--ico-img, var(--ico-size)); height: var(--ico-img, var(--ico-size)); }
+/* цветная фишка вместо голого глифа (категории без иллюстрации) — размер как у картинки */
+.ring .ico .ico-chip { width: var(--ico-img, var(--ico-size)); height: var(--ico-img, var(--ico-size)); }
+
+body[data-theme="light"] .tarc, body[data-theme="light"] .tin { display: none; }
+body[data-theme="light"] .ring .ico { color: var(--text); }
+body[data-theme="light"] .ring.on-fill .ico { color: #FFFFFF; }
+
+body[data-theme="dark"] .tfill { display: none; }
+body[data-theme="dark"] .ring { background: none; }
+body[data-theme="dark"] .ring .ico { color: var(--lv); }
+body[data-theme="dark"] .ring.lvl-none .ico { color: var(--text); }
+
+.cname {
+  font-size: 10.5px; font-weight: 600; color: var(--name); margin-top: 3px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.cnum { font-size: 11.5px; font-weight: 800; line-height: 1.2; color: var(--num); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cplan { font-size: 9.5px; line-height: 1.2; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* План доходов приходит с компа тем же снимком, что и план расходов. Строку держим
+   плотнее расходной: четыре ряда расходов на 360×760 должны остаться на месте. */
+#fieldInc .cplan { font-size: 9px; line-height: 1.1; }
+#fieldInc .cname { margin-top: 2px; }
+#fieldInc .cnum { line-height: 1.15; }
+
+
+/* ---------- карточка кошелька ----------
+   Ширина карточки НЕ зависит от их числа: всегда ровно четверть ряда за вычетом трёх
+   зазоров. При flex:1 один кошелёк растягивался на всю ширину экрана, два - на половину,
+   и ряд каждый раз выглядел по-новому. Пять и больше - та же ширина, лента едет вбок. */
+#fieldWallets .strip {
+  display: flex; overflow-x: auto; scrollbar-width: none;
+  scroll-snap-type: x proximity;
+  /* Запас под рост карточки (цель переноса растёт до 1.10 плюс ободок в 3 px), но
+     отрицательным полем возвращаем его обратно в раскладку: лента режет по своей
+     рамке, а места в колонке не отнимает. Боковой запас теперь живёт ВНУТРИ страницы
+     (.wpage), а не на ленте: страница должна быть ровно во всю ширину окна ленты,
+     иначе прокрутка перестаёт быть кратной странице. Отрицательное поле по бокам
+     остаётся - им лента и забирает эти 6 px обратно у колонки. */
+  padding: 7px 0; margin: -7px -6px;
+}
+/* Страница ленты — ровно четыре карточки во всю ширину окна, как ряд у доходов
+   и расходов. Кошельков на последней странице может быть меньше: оставшиеся места
+   просто пустые. Раньше страниц не было вовсе, лента ехала сплошняком и упиралась
+   в конец — «страница 2» из шести кошельков показывала 3-6, и две первые иконки
+   повторяли хвост первой страницы. */
+#fieldWallets .wpage {
+  flex: 0 0 100%; min-width: 100%; display: flex; gap: 6px;
+  scroll-snap-align: start; padding: 0 6px; overflow: visible;
+}
+#fieldWallets .wpage > .empty { flex: 1 1 auto; }
+/* Прилипание СТРАНИЦАМИ: лента листается ровно так же, как доходы и расходы,
+   и точки под ней означают страницу, а не «сколько уехало». */
+#fieldWallets.many .strip { scroll-snap-type: x mandatory; }
+.wcard {
+  flex: 0 0 calc((100% - 18px) / 4); min-width: 0;
+  background: linear-gradient(155deg, var(--wc-a, var(--wallet)) 0%, var(--wc-b, var(--wallet)) 100%);
+  color: var(--wc-ink, var(--wallet-ink));
+  border-radius: 16px; padding: 7px 8px 6px; text-align: left;
+  border: 1px solid var(--tile-bd);
+  box-shadow: var(--wallet-glow); transition: transform .18s ease, box-shadow .18s ease;
+}
+.wcard .ico { display: block; height: 22px; }
+.wcard .ico svg { width: 22px; height: 22px; display: block; }
+.wcard .cname { font-size: 10px; margin-top: 4px; opacity: .8; color: inherit; text-align: left; }
+.wcard .cbal { font-size: 11.5px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: inherit; }
+
+.empty {
+  padding: 18px 20px; text-align: center; color: var(--muted);
+  font-size: 12.5px; line-height: 1.5; grid-column: 1 / -1;
+}
+
+/* ---------- кнопки ---------- */
+.btn {
+  min-height: var(--btn-h); padding: 0 16px; border-radius: var(--btn-r);
+  font-size: 14px; font-weight: 700; display: inline-flex;
+  align-items: center; justify-content: center; text-align: center;
+}
+.btn.primary { background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+.btn.danger { background: var(--lv-over); color: #FFFFFF; font-weight: 800; }
+.btn.ghost { background: var(--btn-ghost); color: var(--text); border: 1px solid var(--btn-ghost-bd); }
+.btn:active { opacity: .82; }
+
+.chip {
+  min-height: 40px; padding: 0 10px; border-radius: 12px;
+  border: 1px solid var(--btn-ghost-bd); background: var(--btn-ghost); color: var(--text);
+  font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 800; }
+.chip.now { box-shadow: inset 0 0 0 2px var(--lv-ok); }
+
+/* ---------- меню: хомяк-помощник + плитки настроек ----------
+   Список строк заменён сеткой плиток: то же движение пальца, что на главном экране
+   (плитка растёт под нажатием), и статус синка виден сразу, без чтения мелких подписей. */
+#menuBg { position: fixed; inset: 0; background: var(--dim); z-index: 29; }
+#menu {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 82%; max-width: 330px;
+  transform: translateX(-100%); transition: transform .25s ease, visibility .25s;
+  visibility: hidden; z-index: 30; background: var(--sheet);
+  border-right: 1px solid var(--surface-bd);
+  box-shadow: 0 0 40px rgba(0,0,0,.3); display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+}
+#menu.open { transform: none; visibility: visible; }
+.menu-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 12px 12px 12px 14px; border-bottom: 1px solid var(--hairline);
+}
+/* Хомяк слева от названия — тот же диск, что и кнопка меню на главном экране, но
+   крупный: 48 px вместо 32. Он тут и есть лицо приложения, а не значок при строке. */
+.menu-app {
+  flex: 0 0 48px; width: 48px; height: 48px; border-radius: 50%; overflow: hidden;
+  background: var(--avatar-bg); box-shadow: var(--avatar-glow);
+  display: grid; place-items: center;
+}
+.menu-app img { width: 80%; height: 80%; object-fit: contain; display: block; }
+/* название с номером версии стоит по центру круга: .menu-head центрирует своих детей
+   по вертикали, а сам блок названия остаётся строчным - иначе «v0.3.2» уехал бы на
+   отдельную строку всегда, а не только когда номеров два (.menu-ver.two) */
+.menu-title { flex: 1 1 auto; min-width: 0; align-self: center; font-size: 20px; font-weight: 800; line-height: 1.25; }
+/* номер версии рядом с названием: приглушённый, не спорит с заголовком */
+.menu-ver { font-size: 12px; font-weight: 700; color: var(--muted); margin-left: 8px; letter-spacing: .2px; }
+/* когда веб-сборка уехала вперёд оболочки, номеров два: они уходят на свою строку
+   под названием, а не растаскивают шапку меню на две высоты */
+.menu-ver.two { display: block; margin-left: 0; margin-top: 2px; }
+/* чип статуса Free/Pro у версии. Pro - золото (ценность, не ошибка), Free - приглушённый
+   пилюлей; Free тапается (мягкий апселл), Pro - просто статус. Работает в обеих темах. */
+.tier-chip {
+  display: inline-block; vertical-align: middle; margin-left: 8px;
+  padding: 1px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; letter-spacing: .3px;
+}
+.tier-chip.free { background: var(--tile-neutral); border: 1px solid var(--tile-bd); color: var(--muted); cursor: pointer; }
+.tier-chip.free:active { filter: brightness(.96); }
+.tier-chip.pro { background: var(--wallet); color: var(--wallet-ink); border: 1px solid transparent; }
+/* шапка не уезжает: прокручивается только тело меню, и то лишь на низких экранах */
+.menu-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 12px; }
+
+/* ---------- сетка плиток ---------- */
+.menu-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px; }
+.mi {
+  position: relative; display: block; text-align: left;
+  min-height: 84px; padding: 12px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--surface-bd);
+  box-shadow: var(--shadow-card);
+  transition: transform .14s cubic-bezier(.2,.8,.3,1), box-shadow .14s cubic-bezier(.2,.8,.3,1);
+}
+.mi-ic {
+  width: 34px; height: 34px; border-radius: 50%; margin-bottom: 8px;
+  display: grid; place-items: center; position: relative; color: var(--mc, var(--accent));
+}
+/* мягкая подложка того же тона: без color-mix, чтобы жило и в старом WebView */
+.mi-ic::before {
+  content: ''; position: absolute; inset: 0; border-radius: 50%;
+  background: currentColor; opacity: .18;
+}
+.mi-ic svg { position: relative; display: block; }
+.mi-t { display: block; font-size: 13px; line-height: 1.25; font-weight: 700; color: var(--text); }
+.mi-s { display: block; font-size: 11px; line-height: 1.3; color: var(--muted); margin-top: 3px; }
+
+.mi.c-teal   { --mc: var(--hue-0); }
+.mi.c-yellow { --mc: var(--hue-4); }
+.mi.c-purple { --mc: var(--hue-2); }
+.mi.c-coral  { --mc: var(--hue-1); }
+.mi.c-blue   { --mc: var(--hue-3); }
+.mi.c-green  { --mc: var(--lv-ok); }
+.mi.c-grey   { --mc: var(--muted); }
+.mi.c-pink   { --mc: var(--hue-5); }
+body[data-theme="light"] .mi-ic::before { opacity: .24; }
+
+/* Светлая тема: меню держим на цвете страницы (а не на белом), а плиткам даём грань и
+   ту же тень, что у карточек главного экрана. Иначе белые плитки на белом меню было
+   не различить — они сливались с фоном. Тёмную тему это не трогает. */
+body[data-theme="light"] #menu { background: var(--bg); }
+body[data-theme="light"] .menu-head { border-bottom-color: var(--tile-bd); }
+body[data-theme="light"] .mi { border-color: var(--tile-bd); box-shadow: var(--tile-shadow); }
+
+/* счётчик неотправленных операций и точка «есть обновление» */
+.mi-badge {
+  position: absolute; top: 10px; right: 10px; min-width: 20px; height: 20px;
+  padding: 0 6px; border-radius: 999px; background: var(--lv-over); color: #fff;
+  font-size: 11px; font-weight: 800; display: grid; place-items: center;
+}
+.mi-dot {
+  position: absolute; top: 14px; right: 14px; width: 9px; height: 9px;
+  border-radius: 50%; background: var(--accent);
+}
+.mi-badge[hidden], .mi-dot[hidden] { display: none; }
+
+/* выключатель вибрации: рисуем сами, никаких системных чекбоксов */
+.mi-sw {
+  position: absolute; top: 14px; right: 12px; width: 36px; height: 21px;
+  border-radius: 999px; background: var(--track); border: 1px solid var(--surface-bd);
+  transition: background .16s ease;
+}
+.mi-sw i {
+  position: absolute; top: 2px; left: 2px; width: 15px; height: 15px; border-radius: 50%;
+  background: var(--muted); transition: transform .16s cubic-bezier(.2,.8,.3,1), background .16s ease;
+}
+.mi-sw.on { background: var(--accent); border-color: transparent; }
+.mi-sw.on i { transform: translateX(15px); background: var(--accent-ink); }
+
+/* мини-образец темы: показывает, КУДА переключит тап — фон и акцент другой темы */
+.mi-ic.mi-sw2 { border: 1px solid var(--tile-bd); }
+.mi-ic.mi-sw2::before { content: none; }
+.mi-ic.sw-to-dark  { background: linear-gradient(135deg, #0F1F24 0 50%, #3ED2B0 50% 100%); }
+.mi-ic.sw-to-light { background: linear-gradient(135deg, #E9E7F2 0 50%, #8FB7F5 50% 100%); }
+
+/* отклик на палец — тот же рост, что у плиток главного экрана */
+.mi.is-pressed {
+  transform: scale(1.03); box-shadow: var(--tile-shadow-up);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mi.is-pressed { transform: none !important; }
+}
+
+/* ---------- диалоги ---------- */
+#dlgBg { position: fixed; inset: 0; background: var(--dim); z-index: 50; }
+#dlg {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 51;
+  background: var(--sheet); border: 1px solid var(--surface-bd); border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  padding: 8px 18px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-up); max-height: 86dvh; overflow-y: auto;
+  animation: dlgUp .22s ease-out;
+}
+@keyframes dlgUp { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+.dlg-grip { width: 36px; height: 4px; border-radius: 2px; background: var(--tile-neutral); margin: 6px auto 12px; }
+/* окна, что закрываются свайпом вниз (список кошельков): жест берём с ручки и
+   заголовка, вертикальную прокрутку тела диалога это не трогает */
+#dlg.dlg-swipe .dlg-grip, #dlg.dlg-swipe .dlg-t { touch-action: none; }
+.dlg-t { font-size: 17px; font-weight: 800; margin-bottom: 10px; }
+/* Списки (кошельки, категории) закрываются свайпом вниз — у их окна класс .dlg-swipe.
+   Только у них закрепляем заголовок: при прокрутке длинного списка шапка не уезжает.
+   В обычных формах и подтверждениях заголовок оставляем как был. Тень снизу цвета
+   листа закрывает 10px нижнего margin, чтобы содержимое не просвечивало под шапкой. */
+#dlg.dlg-swipe #dlgTitle {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--sheet); box-shadow: 0 10px 0 var(--sheet);
+}
+.dlg-b { font-size: 14px; color: var(--text); margin-bottom: 16px; line-height: 1.45; }
+.dlg-b .lbl { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+.dlg-btns { display: flex; gap: 8px; }
+/* три кнопки в ряд — подписи длиннее, а ширина та же: даём им ужаться,
+   а не переноситься в две строки (общий запас, штатных трёхкнопочных окон сейчас нет) */
+.dlg-btns.three .btn { font-size: 12.5px; padding: 0 6px; }
+.dlg-btns.three .btn:last-child { flex: 1.5 1 0; }   /* самой длинной подписи — больше места */
+
+/* ---------- «Обновление» ---------- */
+.upd { font-size: 14px; line-height: 1.5; color: var(--secondary); }
+.upd p { margin: 0 0 10px; }
+.upd p:last-child { margin-bottom: 0; }
+.upd-h { font-size: 16px; font-weight: 800; color: var(--text); }
+.upd-v { color: var(--muted); font-weight: 700; font-size: 13px; margin-left: 6px; }
+.upd-n { white-space: pre-line; }
+.upd-hint { color: var(--muted); font-size: 12.5px; }
+/* ход бесшовного обновления: одна строка, которая меняется на месте */
+.upd-step { font-size: 16px; font-weight: 800; color: var(--text); }
+
+/* ---------- «О приложении» ---------- */
+.about { font-size: 13.5px; line-height: 1.5; color: var(--secondary); }
+.about p { margin: 0 0 10px; }
+.about p:last-child { margin-bottom: 0; }
+.ab-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.ab-ham {
+  flex: 0 0 40px; width: 40px; height: 40px; border-radius: 50%;
+  background: var(--avatar-bg); box-shadow: var(--avatar-glow);
+  display: grid; place-items: center; overflow: hidden;
+}
+.ab-ham img { width: 80%; height: 80%; object-fit: contain; display: block; }
+.ab-ttl { font-size: 15px; color: var(--text); }
+.ab-ttl b { font-weight: 800; }
+/* строка автора не переносится: «Алексей Дорохин» на своей строке выглядел браком.
+   Шрифт мельче остального текста ровно затем, чтобы она влезла в 360 px. */
+.about .ab-author { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.ab-link {
+  display: inline-block; color: var(--num-ok); font-weight: 700;
+  text-decoration: underline; text-underline-offset: 3px;
+  padding: 4px 0; min-height: 24px;
+}
+/* значки у контактов: приглушённый цвет, вписаны в строку контактов. Каждая ссылка с
+   иконкой неразрывна (inline-block), при нехватке ширины перенос идёт по разделителю. */
+.ab-cico { color: var(--muted); vertical-align: -2px; margin-right: 4px; }
+
+.dlg-btns .btn { flex: 1 1 0; }
+
+.inp {
+  width: 100%; min-height: 44px; padding: 0 12px; border-radius: 14px;
+  border: 1px solid var(--btn-ghost-bd); background: var(--btn-ghost); color: var(--text);
+  font: inherit; font-size: 16px; user-select: text;
+}
+body[data-theme="light"] .inp { border-color: var(--tile-neutral); }
+.inp:focus { outline: none; border-color: var(--accent); }
+/* Свой шеврон вместо системной стрелки: у нативного select она липнет к правому краю
+   и в разных темах рисуется по-разному. Рисуем галочку SVG, кладём её на 14 px от края
+   и по центру по вертикали; padding-right освобождает под неё место, чтобы длинное имя
+   кошелька не наезжало на стрелку. Одинаково в обеих темах - меняется только цвет. */
+select.inp {
+  -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  padding-right: 38px; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386A3A0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 12px;
+}
+select.inp::-ms-expand { display: none; }
+body[data-theme="light"] select.inp {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A7796' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+/* Поле «Дата» в форме операции — это <input type=date>, у него свой системный значок
+   календаря справа, из-за которого строка «Дата» выбивалась из ряда с «Откуда/Куда»
+   (те - селекты со своим шевроном). Прячем родной индикатор, растягивая его на всё
+   поле (тап в любом месте по-прежнему открывает календарь), и рисуем тот же шеврон,
+   что у селектов. max=today ставит noFutureDate в коде - CSS его не трогает.
+   #amDateInput на экране суммы сюда НЕ попадает: у него нет класса .inp. */
+input[type="date"].inp {
+  -webkit-appearance: none; appearance: none;
+  padding-right: 38px; cursor: pointer; position: relative;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2386A3A0' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  background-size: 12px 12px;
+}
+input[type="date"].inp::-webkit-calendar-picker-indicator {
+  position: absolute; top: 0; right: 0; width: 100%; height: 100%;
+  margin: 0; padding: 0; opacity: 0; cursor: pointer;
+}
+body[data-theme="light"] input[type="date"].inp {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237A7796' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+.mgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.mgrid .chip { width: 100%; }
+/* строка года над сеткой месяцев: ‹ 2026 › - 1 января иначе декабрь не открыть */
+.mgrid-y { display: flex; align-items: center; justify-content: space-between; margin: 0 0 10px; }
+.mgrid-year { font-size: 17px; font-weight: 800; }
+.mgrid-nav { width: 44px; min-height: 40px; font-size: 22px; font-weight: 700; padding: 0; }
+.ef { margin-bottom: 12px; }
+.ef:last-child { margin-bottom: 0; }
+.ef-err { color: var(--num-over); font-size: 13px; font-weight: 700; margin: -4px 0 12px; }
+/* «Скрыть» и «Удалить» в форме кошелька: две равные кнопки в строку, опасная - справа */
+.ef-acts { display: flex; gap: 8px; margin-top: 4px; }
+.ef-acts .btn { flex: 1 1 0; }
+
+/* ---------- закрывающие свайпы ----------
+   Ручка и шапка листа - зона жеста «смахнуть вниз», поэтому браузеру там прокручивать
+   нечего. Само тело листа под ними прокручивается как обычно: список операций пальцем
+   вверх-вниз не должен захлопывать карточку. */
+#card .sh-grip, #card .sh-head,
+#summary .sm-head,
+#amount .am-head,
+#icSheet .dlg-grip, #icSheet .ic-head { touch-action: none; }
+/* меню целиком уезжает влево: по горизонтали ему прокручивать нечего, по вертикали -
+   есть, поэтому pan-y, а не none. touch-action НЕ наследуется, поэтому то же правило
+   раздаём внутренностям: иначе браузер забирал горизонтальный жест, начатый на плитке
+   настроек, и смахивание работало только с шапки. */
+#menu, #menuBg, #menu * { touch-action: pan-y; }
+
+/* ---------- перетаскивание ---------- */
+body.dragging { touch-action: none; }
+body.dragging .strip,
+body.dragging .pages { overflow: hidden; }
+/* Пока плитку несут, поля листает edgeWatch - целыми страницами и плавно (scrollTo).
+   Прилипание в этот момент перебивало бы доводку, поэтому на время переноса его
+   снимаем; лента и так встаёт ровно на страницу - её ход кратен ширине окна. */
+body.dragging #fieldWallets .strip,
+body.dragging .pages { scroll-snap-type: none; }
+/* Категория, выведенная на компе, но с фактом в этом месяце: показываем приглушённо
+   и в хвосте — деньги должны быть видны, но категория больше не рабочая. */
+.circle.retired { opacity: .55; }
+.circle.retired .cname { text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.circle.dragsrc { opacity: .3; }
+
+/* ---------- отклик на касание и цель переноса ----------
+   Плитка отвечает ростом, а не вдавливанием: то же движение «приподняться», что у
+   блоков в остальных проектах. Всё живёт на самой плитке (transform + box-shadow),
+   поэтому кольцо, заливка и иконка растут вместе и перекладки страницы не бывает. */
+.circle.is-pressed .ring {
+  transform: scale(1.06);
+  box-shadow: inset 0 0 0 1px var(--tile-bd), var(--tile-shadow-up);
+  transition: transform .14s cubic-bezier(.2,.8,.3,1), box-shadow .14s cubic-bezier(.2,.8,.3,1);
+}
+.wcard.is-pressed {
+  transform: scale(1.03);
+  box-shadow: var(--wallet-glow-up);
+  transition: transform .14s cubic-bezier(.2,.8,.3,1), box-shadow .14s cubic-bezier(.2,.8,.3,1);
+}
+/* «Поднято»: палец продержался 150 мс, и плитка оторвалась от ленты - рост заметно
+   больше, чем под обычным нажатием. Это единственный видимый знак, что теперь её
+   можно нести куда угодно, а лента под пальцем стоит. */
+.circle.is-pressed.is-lifted .ring { transform: scale(1.13); }
+.wcard.is-pressed.is-lifted { transform: scale(1.09); }
+
+/* Пока тащим - уход с цели должен быть мгновенным (80 мс), иначе за пальцем тянется
+   хвост из «ещё увеличенных» плиток. Правило стоит ДО .is-target: при равном весе
+   побеждает нижнее, поэтому вход на цель остаётся 160 мс, а выход - 80 мс. */
+body.dragging .circle .ring,
+body.dragging .wcard { transition-duration: .08s; }
+
+.circle.is-target .ring {
+  transform: scale(1.10);
+  box-shadow: inset 0 0 0 1px var(--tile-bd), 0 0 0 3px var(--accent-soft), var(--tile-shadow-up);
+  transition: transform .16s ease-out, box-shadow .16s ease-out;
+}
+.wcard.is-target {
+  transform: scale(1.10);
+  box-shadow: 0 0 0 3px var(--accent-soft), var(--wallet-glow-up);
+  transition: transform .16s ease-out, box-shadow .16s ease-out;
+}
+
+.dragghost {
+  position: fixed; left: 0; top: 0; pointer-events: none; z-index: 45; opacity: .92;
+  filter: drop-shadow(0 10px 22px rgba(0,0,0,.42));
+}
+body[data-theme="light"] .dragghost { filter: drop-shadow(0 10px 22px rgba(60,55,100,.28)); }
+/* призрак приподнят чуть сильнее плитки в покое: пара читается как «взял → цель выросла».
+   Для карточки кошелька масштаб дописывает ui.js прямо в transform - там же живёт сдвиг. */
+.dragghost .ring { transform: scale(1.04); }
+.dragghost .cplan { display: none; }
+
+/* ---------- режим редактирования ---------- */
+body.editmode .circle { touch-action: none; position: relative; }
+/* Карандаш на плитке: настоящая кнопка, а не псевдоэлемент с буквой «✎» - глиф
+   зависел от подставленного шрифта, а нажать его было нечем. Тап по значку
+   открывает форму этой плитки, перетаскивание с него не начинается. */
+.tedit { display: none; }
+body.editmode .circle > .tedit {
+  position: absolute; z-index: 3;
+  display: grid; place-items: center;
+  width: 22px; height: 22px; border-radius: 50%; padding: 0;
+  background: var(--sheet); border: 1px solid var(--surface-bd); color: var(--text);
+  box-shadow: var(--shadow-card);
+}
+body.editmode .circle > .tedit svg { display: block; }
+/* у категории значок цепляется за нижний правый угол кольца, у кошелька - за угол
+   самой карточки (кольца у неё нет) */
+body.editmode .circle.tile > .tedit { top: calc(var(--ring) - 15px); left: calc(50% + var(--ring) / 2 - 15px); }
+/* у кошелька значок вынесен за угол карточки: внутри в этом месте стоит баланс,
+   и «255 000 ₽» пришлось бы или резать, или прятать под карандаш */
+body.editmode .circle.wcard > .tedit { right: -8px; bottom: -8px; }
+.dragghost .tedit { display: none !important; }
+/* Призрак - клон плитки, поэтому под него подходит и правило выше
+   («body.editmode .circle { position: relative }»). Оно весомее одиночного
+   .dragghost и отбирало у призрака position: fixed: в режиме правки он не ехал
+   за пальцем, а оставался стоять в потоке страницы. Возвращаем фиксацию селектором
+   потяжелее, а не !important. */
+body.editmode .circle.dragghost { position: fixed; touch-action: none; }
+.circle.reordering { opacity: .3; }
+
+@keyframes wig {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-6deg); }
+  75% { transform: rotate(6deg); }
+}
+body.editenter .circle .ring, body.editenter .circle.wcard { animation: wig .3s ease-in-out 1; }
+
+/* Полоса правки живёт в слоте шапки: сама шапка на это время убирается, высота
+   ряда сохраняется, и экран под ней не прыгает. */
+body.editmode #top { display: none; }
+#editBar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  margin: 0 12px; padding: 0 4px; min-height: 45px; border-radius: 16px;
+  background: var(--surface); border: 1px solid var(--surface-bd); box-shadow: var(--shadow-card);
+}
+/* пустышка слева ровно под ширину галочки: заголовок стоит по центру полосы,
+   а не по центру остатка */
+.eb-sp { flex: 0 0 44px; }
+.eb-t {
+  flex: 1 1 auto; min-width: 0; text-align: center;
+  font-size: 15px; font-weight: 800; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.eb-ok {
+  flex: 0 0 44px; width: 44px; height: 44px; border-radius: 14px;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink);
+}
+.eb-ok:active { opacity: .82; }
+/* тост тоже висит сверху: в режиме правки опускаем его под полосу, иначе он
+   накрывает ту самую галочку, которой из режима выходят */
+body.editmode #toast { top: calc(env(safe-area-inset-top) + 66px); }
+
+/* Строка «выбранная иконка + Изменить»: простыня из полусотни кнопок больше не
+   занимает всю форму, она уехала в отдельный лист #icSheet. */
+.icrow { display: flex; align-items: center; gap: 10px; }
+.icprev {
+  flex: 0 0 44px; width: 44px; height: 44px; border-radius: 14px;
+  display: grid; place-items: center;
+  background: var(--btn-ghost); border: 1px solid var(--btn-ghost-bd); color: var(--text);
+}
+/* превью иконки кошелька красится выбранным цветом — видно сразу обе настройки */
+.icprev[class*="wc-"] {
+  background: linear-gradient(155deg, var(--wc-a) 0%, var(--wc-b) 100%);
+  color: var(--wc-ink); border-color: var(--tile-bd);
+}
+.icprev svg { display: block; }
+.icprev img { width: 26px; height: 26px; }
+.btn.icchg { flex: 0 0 auto; min-height: 44px; padding: 0 18px; }
+
+/* палитра цветов кошелька: десять образцов, выбранный в кольце */
+.cgrid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 6px; }
+.cw {
+  width: 100%; aspect-ratio: 1 / 1; min-height: 26px; border-radius: 50%;
+  background: linear-gradient(155deg, var(--wc-a) 0%, var(--wc-b) 100%);
+  border: 1px solid var(--tile-bd); padding: 0;
+}
+.cw.on { box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent); }
+.cw:active { opacity: .8; }
+
+/* лист выбора иконки — поверх формы, со своим фоном */
+#icBg { position: fixed; inset: 0; background: var(--dim); z-index: 60; }
+#icSheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 61;
+  background: var(--sheet); border: 1px solid var(--surface-bd); border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  padding: 8px 18px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-up); max-height: 72dvh; overflow-y: auto;
+  animation: dlgUp .22s ease-out;
+}
+.ic-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+  /* липкая шапка листов (иконки, «Куда перевести»): заголовок и «Закрыть» не уезжают
+     при прокрутке сетки. Тень снизу цвета листа закрывает 10px margin под шапкой. */
+  position: sticky; top: 0; z-index: 6;
+  background: var(--sheet); box-shadow: 0 10px 0 var(--sheet);
+}
+.ic-head .dlg-t { flex: 1 1 auto; min-width: 0; margin-bottom: 0; }
+
+/* лист «Куда перевести» — выезжает поверх карточки кошелька, но ниже экрана суммы */
+#trBg { position: fixed; inset: 0; background: var(--dim); z-index: 37; }
+#trSheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 38;
+  background: var(--sheet); border: 1px solid var(--surface-bd); border-bottom: 0;
+  border-radius: 24px 24px 0 0;
+  padding: 8px 18px calc(18px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-up); max-height: 72dvh; overflow-y: auto;
+  animation: dlgUp .22s ease-out;
+}
+#trSheet .wgrid { margin-bottom: 0; }
+.tr-tt { flex: 1 1 auto; min-width: 0; }
+.tr-tt .dlg-t { margin-bottom: 0; }
+.tr-from { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* шапка листа - зона закрывающего свайпа вниз: списки под ней прокручиваются как обычно */
+#trSheet .dlg-grip, #trHead { touch-action: none; }
+
+/* сетка иконок */
+.icgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.icbtn {
+  min-height: 44px; border-radius: 12px; display: grid; place-items: center;
+  background: var(--btn-ghost); border: 1px solid var(--btn-ghost-bd); color: var(--text);
+}
+.icbtn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.icbtn:active { opacity: .8; }
+/* в сетке доходов и расходов - цветные иллюстрации, они чуть крупнее глифа */
+.icbtn img { width: 26px; height: 26px; }
+
+.ro { font-size: 15px; font-weight: 600; padding: 2px 0 0; }
+.hint { font-size: 12px; color: var(--muted); margin-top: 3px; }
+.btn.wide { width: 100%; margin-top: 4px; }
+
+/* строка «Иконка · Изменить» в карточке категории/источника */
+.sh-icorow { flex: 1 1 100%; display: flex; align-items: center; gap: 10px; }
+.sh-icorow .sh-icol { flex: 0 0 auto; font-size: 12px; font-weight: 700; color: var(--muted); }
+.sh-icorow .icprev { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 12px; }
+.sh-acts .sh-icorow .btn.icchg { flex: 0 0 auto; margin-left: auto; min-height: 38px; padding: 0 14px; font-size: 13px; }
+/* строка «Лимит на месяц · значение · Изменить/Задать» — тот же ряд, что у иконки */
+.sh-limrow .sh-limval { flex: 0 1 auto; font-size: 14px; font-weight: 800; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- кошельки плитками ----------
+   Список строк «иконка · имя · баланс · Скрыть» заменён теми же карточками, что на
+   главном экране: хозяин узнаёт свой кошелёк по цвету, а не читает строку. «Скрыть»
+   из строки убран - он живёт внутри формы кошелька, вместе с «Удалить».
+   Той же сеткой рисуется лист «Куда перевести». */
+.wgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.wtile {
+  min-height: 78px; border-radius: 18px; padding: 10px 12px; text-align: left; min-width: 0;
+  background: linear-gradient(155deg, var(--wc-a, var(--wallet)) 0%, var(--wc-b, var(--wallet)) 100%);
+  color: var(--wc-ink, var(--wallet-ink));
+  border: 1px solid var(--tile-bd); box-shadow: var(--wallet-glow);
+  display: flex; flex-direction: column; justify-content: flex-start;
+  transition: transform .14s cubic-bezier(.2,.8,.3,1), box-shadow .14s cubic-bezier(.2,.8,.3,1);
+}
+.wtile .ico { display: block; height: 22px; }
+.wtile .ico svg { width: 22px; height: 22px; display: block; }
+.wtile .wt-n { font-size: 12px; margin-top: 8px; opacity: .82; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wtile .wt-b { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wtile:active { transform: scale(.97); box-shadow: var(--wallet-glow-up); }
+/* скрытый кошелёк - тот же цвет, но приглушённый: видно, что он «выключен» */
+.wtile.off { opacity: .5; }
+/* «+ Кошелёк» — последняя плитка пунктиром: место для нового видно, а цвет не врёт */
+/* пунктир рисуем цветом подписи (--btn-ghost-bd в светлой теме прозрачен, и рамки
+   там просто не было - плитка читалась как пустое место, а не как кнопка) */
+.wtile.add {
+  background: var(--btn-ghost); box-shadow: none; color: var(--muted);
+  border: 1.5px dashed var(--muted);
+  display: grid; place-items: center; font-size: 14px; font-weight: 700;
+}
+.wtile.add:active { background: var(--btn-ghost); transform: scale(.97); }
+/* Плитка выбора категории/источника в пикере кнопочного пути: та же форма, что у
+   плитки кошелька (.wtile), но нейтральный фон листа и цветной значок по тинту категории
+   (t0…t5) - переиспользуем существующие тинты, свой UI не изобретаем. */
+.wtile.ptile {
+  background: var(--surface); border: 1px solid var(--surface-bd);
+  box-shadow: var(--shadow-card); color: var(--text);
+}
+.wtile.ptile .ico { color: var(--tint, var(--accent)); }
+.wtile.ptile .wt-n { opacity: 1; }
+.wtile.ptile:active { transform: scale(.97); box-shadow: var(--shadow-card); }
+/* «Скрытые (N)» — свёрнутая группа под живыми кошельками */
+.wl-fold { width: 100%; margin-bottom: 10px; }
+.wl-foldt { font-size: 12px; font-weight: 700; color: var(--muted); margin: 0 2px 8px; }
+
+/* ---------- экран суммы ---------- */
+#amount {
+  position: fixed; inset: 0; z-index: 40;
+  background: var(--bg); background-image: var(--bg-img);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+}
+.am-head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 14px 12px 10px;
+}
+.am-path {
+  flex: 1 1 auto; min-width: 0; text-align: center;
+  font-size: 15px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.am-arrow { color: var(--muted); margin: 0 7px; font-weight: 600; }
+/* Конец операции как выбираемая фишка: у кнопочного пути источник/цель не заданы drag'ом,
+   их выбирают тапом прямо в шапке листа. Пустой конец - пунктирная акцентная фишка с
+   приглашающей подписью; заполненный - обычная фишка (тап меняет выбор). */
+.am-path .am-pick {
+  display: inline-block; max-width: 42%; vertical-align: bottom;
+  padding: 3px 10px; border-radius: 12px; line-height: 1.5;
+  border: 1px solid var(--surface-bd); background: var(--surface);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.am-path .am-pick:active { transform: scale(.97); }
+.am-path .am-pick.empty { color: var(--accent); border: 1px dashed var(--accent-soft); background: transparent; font-weight: 800; }
+/* Ставку «сохранить» с шапки убрали (широкая кнопка «Подтвердить» над клавиатурой).
+   Спейсер держит «откуда → куда» ровно по центру напротив крестика слева. */
+.am-head-spacer { flex: 0 0 44px; }
+
+/* Широкая основная кнопка над клавиатурой: та же гамма, что у «Сохранить»/
+   «Изменить баланс» (var(--accent)), под большой палец, скруглена по теме. */
+.am-confirm-wrap { flex: 0 0 auto; padding: 4px 12px 8px; }
+.am-confirm {
+  width: 100%; min-height: 50px; border-radius: var(--btn-r);
+  display: flex; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-ink);
+  font-size: 16px; font-weight: 800; letter-spacing: .2px;
+}
+.am-confirm:disabled { background: var(--tile-neutral); color: var(--muted); cursor: default; }
+.am-confirm:not(:disabled):active { opacity: .82; }
+
+.am-num {
+  flex: 1 1 auto; min-height: 92px;
+  display: flex; flex-direction: column; justify-content: center; align-items: flex-end;
+  padding: 12px 20px 14px; overflow: hidden;
+}
+.am-mini {
+  font-size: 15px; font-weight: 600; color: var(--muted); min-height: 20px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.am-expr {
+  font-size: clamp(36px, 12vw, 50px); font-weight: 800; line-height: 1.1;
+  letter-spacing: -1.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
+.am-expr.zero { color: var(--muted); }
+.am-expr.over { color: var(--lv-over); }
+.am-mini.warn { color: var(--lv-over); font-weight: 700; }
+.am-expr .cur { font-size: .62em; font-weight: 700; color: var(--muted); margin-left: 2px; letter-spacing: 0; }
+
+.am-keys {
+  flex: 0 0 42%; min-height: 248px; max-height: 400px;
+  display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 1fr;
+  gap: 6px; padding: 10px; background: var(--keys);
+  border-radius: 24px 24px 0 0;
+}
+.amk {
+  display: grid; place-items: center; border-radius: 16px;
+  background: var(--key); color: var(--text);
+  font-size: 23px; font-weight: 700; min-height: 52px;
+}
+body[data-theme="light"] .amk { box-shadow: 0 2px 6px rgba(60,55,100,.06); }
+.amk.op { background: var(--key-op); color: var(--accent); box-shadow: none; }
+body[data-theme="light"] .amk.op { color: var(--text); }
+.amk[data-k=","] { font-size: 30px; padding-bottom: 20px; }
+.amk:active, .amk.op:active { background: var(--key-a); }
+
+.am-date {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 6px;
+  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  background: var(--accent); color: var(--accent-ink);
+}
+.amd {
+  flex: 1 1 auto; min-height: 42px; border-radius: 12px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font-size: 14px; font-weight: 600; color: var(--accent-ink); opacity: .72; background: transparent;
+  position: relative; cursor: pointer;
+}
+.amd.cal { flex: 0 0 auto; padding: 0 12px; }
+.amd.on { background: rgba(0,0,0,.14); opacity: 1; font-weight: 800; }
+body[data-theme="light"] .amd.on { background: rgba(255,255,255,.20); }
+.amd:active { opacity: .9; }
+.am-dval { font-size: 14px; font-weight: 700; }
+#amDateInput { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; border: 0; padding: 0; cursor: pointer; }
+
+/* ---------- нижний лист: карточка кошелька/категории ---------- */
+#cardBg { position: fixed; inset: 0; background: var(--dim); z-index: 35; }
+#card {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 78dvh; z-index: 36;
+  background: var(--sheet); border: 1px solid var(--surface-bd); border-bottom: 0;
+  border-radius: 32px 32px 0 0; box-shadow: var(--shadow-up);
+  display: flex; flex-direction: column; overflow: hidden;
+  padding-bottom: env(safe-area-inset-bottom);
+  transform: translateY(100%); transition: transform .25s ease;
+}
+#card.open { transform: none; }
+
+.sh-grip { flex: 0 0 auto; width: 36px; height: 4px; border-radius: 2px; background: var(--tile-neutral); margin: 10px auto 0; }
+.sh-head { flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 14px var(--sh-pad) 0; }
+.sh-ico {
+  flex: 0 0 auto; width: 52px; height: 52px; border-radius: 18px;
+  display: grid; place-items: center;
+}
+.sh-ico svg { width: 26px; height: 26px; }
+.sh-ico img { width: 30px; height: 30px; }
+.sh-ico.wallet {
+  background: linear-gradient(155deg, var(--wc-a, var(--wallet)) 0%, var(--wc-b, var(--wallet)) 100%);
+  color: var(--wc-ink, var(--wallet-ink));
+}
+.sh-ico.cat { background: var(--tint, var(--tile-neutral)); color: var(--text); }
+body[data-theme="dark"] .sh-ico { width: 46px; height: 46px; border-radius: 50%; }
+body[data-theme="dark"] .sh-ico svg { width: 22px; height: 22px; }
+body[data-theme="dark"] .sh-ico img { width: 26px; height: 26px; }
+body[data-theme="dark"] .sh-ico.wallet { box-shadow: 0 0 16px rgba(var(--wc-rgb, 245,207,75), .35); }
+body[data-theme="dark"] .sh-ico.cat { background: rgba(255,255,255,.06); color: var(--lv, var(--text)); }
+
+.sh-tt { flex: 1 1 auto; min-width: 0; }
+.sh-name { font-size: 18px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-sub { font-size: 12px; font-weight: 600; color: var(--muted); }
+.sh-x { flex: 0 0 40px; width: 40px; height: 40px; display: grid; place-items: center; color: var(--muted); border-radius: 12px; }
+.sh-x:active { background: var(--btn-ghost); color: var(--text); }
+
+.sh-amt {
+  flex: 0 0 auto; padding: 20px var(--sh-pad) 0;
+  font-size: 36px; font-weight: 800; letter-spacing: -1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+body[data-theme="dark"] .sh-amt { font-size: 34px; letter-spacing: -.8px; }
+.sh-amt.neg { color: var(--num-over); }
+
+/* у категории тут две строки (план и «Иконка · Изменить»), у кошелька — две кнопки в ряд */
+.sh-acts { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 8px; padding: 14px var(--sh-pad) 18px; }
+.sh-acts .btn { flex: 1 1 0; padding: 0 6px; white-space: nowrap; }
+/* «Изменить баланс» — длинная подпись, ей своя строка; «Перевести» и «Настроить»
+   встают под ней парой. Втроём в ряд подписи не читались бы на 360 px. */
+.sh-acts .btn.w100 { flex: 1 1 100%; }
+.sh-acts:empty { display: none; }
+.sh-plan {
+  flex: 1 1 100%; display: block; padding: 4px 0;
+  font-size: 14px; font-weight: 700; color: var(--muted);
+}
+.sh-plan b { color: var(--text); font-weight: 800; }
+
+.card-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+
+/* строка операции и зоны свайпа под ней */
+.txrow { position: relative; overflow: hidden; touch-action: pan-y; }
+.txact {
+  position: absolute; top: 0; bottom: 0; width: 55%;
+  display: flex; align-items: center; padding: 0 18px;
+  font-size: 14px; font-weight: 700; color: #FFFFFF;
+}
+.txact.edit { left: 0; justify-content: flex-start; background: var(--accent); color: var(--accent-ink); }
+.txact.del { right: 0; justify-content: flex-end; background: var(--lv-over); }
+.txrow.to-edit .txact.edit, .txrow.to-del .txact.del { filter: brightness(1.12); }
+.txfront {
+  position: relative; display: flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 12px var(--sh-pad); background: var(--sheet);
+  border-top: 1px solid var(--hairline);
+  transition: transform .18s ease;
+}
+.txico {
+  flex: 0 0 38px; width: 38px; height: 38px; border-radius: 13px;
+  display: grid; place-items: center;
+  background: var(--tint, var(--tile-neutral)); color: var(--text);
+}
+.txico svg { width: 18px; height: 18px; }
+.txico img { width: 22px; height: 22px; }
+.txd { flex: 0 0 40px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.txmid { flex: 1 1 auto; min-width: 0; }
+.txn { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txmeta { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.txa { flex: 0 0 auto; font-size: 15px; font-weight: 800; white-space: nowrap; }
+.txa.neg { color: var(--num-over); }
+.txa.pos { color: var(--num-ok); }
+.txa.zero { color: var(--muted); }
+
+body[data-theme="light"] .txd { display: none; }
+body[data-theme="dark"] .txico, body[data-theme="dark"] .txmeta { display: none; }
+body[data-theme="dark"] .txn { font-weight: 600; }
+body[data-theme="dark"] .txfront { padding-top: 14px; padding-bottom: 14px; }
+
+.sh-hint {
+  flex: 0 0 auto; margin: auto var(--sh-pad) 20px; display: flex; align-items: center; gap: 10px;
+  background: var(--btn-ghost); border: 1px solid var(--surface-bd);
+  border-radius: 16px; padding: 10px 12px;
+}
+body[data-theme="light"] .sh-hint { background: var(--bg); }
+.sh-hint[hidden] { display: none; }   /* подсказку прячем, когда операций нет или её погасили */
+/* подсказка над списком (cardAdjustHint): без «auto» сверху, иначе она уезжала бы вниз */
+.sh-hint.sh-hint-top { margin: 0 var(--sh-pad) 12px; }
+.sh-ham { flex: 0 0 32px; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; background: var(--avatar-bg); display: grid; place-items: center; }
+.sh-ham img { width: 80%; height: 80%; object-fit: contain; display: block; }
+.sh-ht { font-size: 12px; line-height: 1.35; font-weight: 600; color: var(--secondary); }
+
+/* ---------- главная подсказка «подними и неси» ----------
+   Фиксирована у нижнего края главного экрана, гасится свайпом. Узкая по центру, чтобы
+   не перекрывать плитки; z-index ниже любых слоёв поверх (меню, карточка, экран суммы). */
+#mainHint {
+  position: fixed; left: 12px; right: 84px; bottom: calc(8px + env(safe-area-inset-bottom));
+  z-index: 12; margin: 0 auto; max-width: 340px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--sheet); border: 1px solid var(--surface-bd);
+  border-radius: 16px; padding: 9px 12px; box-shadow: var(--shadow-up);
+  animation: mhUp .22s ease-out;
+  /* сквозная для указателя: подсказка стоит над нижним рядом плиток, но не должна
+     перехватывать тап/перенос — плитки под ней остаются рабочими. Свайп для гашения
+     ловится документным слушателем по попаданию в её рамку (bindHintSwipe). */
+  pointer-events: none;
+}
+#mainHint[hidden] { display: none; }
+@keyframes mhUp { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+body[data-theme="light"] #mainHint { border-color: var(--tile-bd); box-shadow: var(--tile-shadow-up); }
+.mh-ham { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; background: var(--avatar-bg); box-shadow: var(--avatar-glow); display: grid; place-items: center; }
+.mh-ham img { width: 80%; height: 80%; object-fit: contain; display: block; }
+.mh-t { font-size: 12px; line-height: 1.35; font-weight: 600; color: var(--secondary); }
+
+/* Кнопка-«плюс» (FAB): явный, заметный путь записи операции вдобавок к drag. Плавает
+   в правом нижнем углу главного экрана. Прячется, когда поверх открыт любой слой
+   (лист суммы, карточка, меню, аналитика, онбординг) - hidden ставит updateMainHint. */
+.fab {
+  position: fixed; z-index: 13;
+  right: max(16px, calc(env(safe-area-inset-right) + 12px));
+  bottom: calc(env(safe-area-inset-bottom) + 14px);
+  width: 56px; height: 56px; border-radius: 50%; border: none;
+  background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; cursor: pointer;
+  box-shadow: 0 10px 24px var(--accent-soft), 0 3px 10px rgba(0,0,0,.28);
+  transition: transform .14s cubic-bezier(.2,.8,.3,1);
+}
+.fab:active { transform: scale(.92); }
+.fab[hidden] { display: none; }
+/* Ряд крупных кнопок выбора типа в окне «Новая операция» (кнопочный путь) */
+.op-pick { display: flex; flex-direction: column; gap: 10px; }
+.op-pick .btn { width: 100%; }
+
+/* Подсказка режима правки: тот же фиксированный баннер, что и главная. Отдельным правилом,
+   чтобы не тащить за собой pointer-events и анимацию mainHint через общий селектор. */
+#editHint {
+  position: fixed; left: 12px; right: 12px; bottom: calc(8px + env(safe-area-inset-bottom));
+  z-index: 12; margin: 0 auto; max-width: 340px;
+  display: flex; align-items: center; gap: 10px;
+  background: var(--sheet); border: 1px solid var(--surface-bd);
+  border-radius: 16px; padding: 9px 12px; box-shadow: var(--shadow-up);
+  animation: mhUp .22s ease-out; pointer-events: none;   /* сквозная: не мешает перестановке плиток */
+}
+#editHint[hidden] { display: none; }
+body[data-theme="light"] #editHint { border-color: var(--tile-bd); box-shadow: var(--tile-shadow-up); }
+
+/* Компактная подсказка-строка в тон листа: внутри окна (#dlgHint) и на экране суммы (#amHint) */
+.dlg-hint { flex: 0 0 auto; margin: 4px 16px 2px; }
+.am-hint { flex: 0 0 auto; margin: 2px 12px 4px; }
+.dlg-hint, .am-hint {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--btn-ghost); border: 1px solid var(--surface-bd);
+  border-radius: 14px; padding: 9px 12px;
+}
+body[data-theme="light"] .dlg-hint, body[data-theme="light"] .am-hint { background: var(--bg); }
+.dlg-hint[hidden], .am-hint[hidden] { display: none; }
+.dh-ham { flex: 0 0 30px; width: 30px; height: 30px; border-radius: 50%; overflow: hidden; background: var(--avatar-bg); display: grid; place-items: center; }
+.dh-ham img { width: 80%; height: 80%; object-fit: contain; display: block; }
+.dh-t { font-size: 12px; line-height: 1.35; font-weight: 600; color: var(--secondary); }
+
+/* ---------- тост ----------
+   Живёт СВЕРХУ, под шапкой: снизу он накрывал «Готово» и нижние кнопки листов, и
+   отменить операцию хозяин не успевал - приходилось ждать, пока тост уедет сам.
+   Оттуда же и выезжает - сверху вниз. */
+#toast {
+  position: fixed; left: 12px; right: 12px; top: calc(10px + env(safe-area-inset-top));
+  z-index: 62; background: var(--sheet); border: 1px solid var(--surface-bd);
+  border-radius: 16px; box-shadow: var(--shadow-up); padding: 12px 8px 12px 14px;
+  display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600;
+  animation: toastDown .2s ease-out;
+}
+@keyframes toastDown { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+#toast span { flex: 1 1 auto; min-width: 0; }
+.tbtn {
+  flex: 0 0 auto; min-height: 36px; padding: 0 12px; border-radius: 12px;
+  color: var(--accent); font-weight: 800; font-size: 14px;
+}
+body[data-theme="light"] .tbtn { color: var(--num-ok); }
+.tbtn:active { background: var(--btn-ghost); }
+
+/* ---------- анимации операции (anim.js) ---------- */
+.flychip {
+  position: fixed; left: 0; top: 0; z-index: 55; pointer-events: none;
+  padding: 4px 10px; border-radius: 999px; box-shadow: var(--shadow-up);
+  background: var(--sheet); border: 1px solid var(--surface-bd);
+  font-size: 14px; font-weight: 800; white-space: nowrap;
+}
+.flychip.neg { color: var(--num-over); }
+.flychip.pos { color: var(--num-ok); }
+
+.delta {
+  position: fixed; left: 0; top: 0; z-index: 55; pointer-events: none;
+  font-size: 13px; font-weight: 800; white-space: nowrap;
+}
+.delta.neg { color: var(--num-over); }
+.delta.pos { color: var(--num-ok); }
+@keyframes floatUp {
+  from { opacity: 1; transform: translateY(0); }
+  to { opacity: 0; transform: translateY(-14px); }
+}
+
+.ring.pop, .wcard.pop { animation: pop .15s ease-out 1; }
+@keyframes pop {
+  0% { transform: scale(1); }
+  55% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+/* Разовый «доводчик» для перебора (lvl-over): после того как кольцо налилось, ОДИН
+   мягкий пульс-свечение цветом уровня (--lv = красный), затем статично. iteration 1 -
+   никакого бесконечного мигания. Задержка .45s ждёт окончания заливки .tfill/.arc.
+   Класс .fill-pulse навешивает revealRingFills() один раз за сессию; глобальное правило
+   prefers-reduced-motion ниже (animation: none !important) гасит и его. */
+.ring.fill-pulse.lvl-over { animation: ringOverPulse 1s ease-out .45s 1; }
+@keyframes ringOverPulse {
+  0%   { box-shadow: inset 0 0 0 1px var(--tile-bd), var(--tile-shadow); }
+  45%  { box-shadow: inset 0 0 0 1px var(--tile-bd), 0 0 9px 2px var(--lv), var(--tile-shadow); }
+  100% { box-shadow: inset 0 0 0 1px var(--tile-bd), var(--tile-shadow); }
+}
+
+/* reel-сборка (промо-скринкасты): заливку колец растягиваем с ~0.45 с до ~1.5 с, чтобы
+   успеть снять хук на 2 секунды. Область строго под .reel (класс висит на <html> только в
+   reel) — штатные .tfill/.arc/.arc не меняются. Доводчик-пульс на красном (lvl-over)
+   сдвигаем на 1.5 с, чтобы он шёл ПОСЛЕ удлинённой заливки, а не в её середине. Правила без
+   !important: под prefers-reduced-motion общий сброс `* { transition/animation: none }` ниже
+   всё равно гасит и заливку, и пульс. */
+.reel .tfill { transition-duration: 1.5s; }
+.reel .tarc .arc { transition-duration: 1.5s; }
+.reel .ring.fill-pulse.lvl-over { animation-delay: 1.5s; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  /* «меньше движения» - значит без роста: отклик остаётся, но только тенью и кольцом */
+  .circle.is-pressed .ring, .wcard.is-pressed,
+  .circle.is-target .ring, .wcard.is-target,
+  .dragghost .ring { transform: none !important; }
+}
+
+/* ---------- экран «Аналитика» ---------- */
+#summary {
+  position: fixed; inset: 0; z-index: 33;
+  background: var(--bg); background-image: var(--bg-img);
+  display: flex; flex-direction: column;
+  padding-top: env(safe-area-inset-top);
+  transform: translateY(100%); transition: transform .25s ease;
+}
+#summary.open { transform: none; }
+
+.sm-head { flex: 0 0 auto; display: flex; align-items: center; gap: 8px; padding: 16px 12px 6px; }
+.sm-lead { flex: 0 0 36px; }                          /* «к выбору» слева, внутри экрана */
+.sm-center { flex: 1 1 auto; min-width: 0; }
+.sm-title { font-size: 18px; font-weight: 800; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sm-mo { display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 0 4px; }
+.sm-nav {
+  flex: 0 0 36px; width: 36px; height: 36px; border-radius: 12px;
+  display: grid; place-items: center; color: var(--muted); font-size: 20px; line-height: 1;
+}
+.sm-nav:active { background: var(--btn-ghost); color: var(--text); }
+.sm-ml {
+  flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 800; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* Видимость по data-view: «chooser» — выбор из карточек (заголовок + карточки),
+   любой рабочий экран — стрелка «к выбору», навигация по месяцу и тело. Разрез
+   «Расходы | Доходы» (#smKinds) есть только у «Сводки». */
+#summary[data-view="chooser"] .sm-lead,
+#summary[data-view="chooser"] .sm-mo,
+#summary[data-view="chooser"] #smKinds,
+#summary[data-view="chooser"] .sm-body { display: none; }
+#summary:not([data-view="chooser"]) .sm-title,
+#summary:not([data-view="chooser"]) #smChoose { display: none; }
+#summary:not([data-view="summary"]) #smKinds { display: none; }
+
+/* экран выбора: две большие карточки, каждая ведёт на свой экран */
+.sm-choose { flex: 1 1 auto; display: flex; flex-direction: column; gap: 12px; padding: 20px var(--sm-pad); }
+.sm-card {
+  display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 18px 16px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--surface-bd); box-shadow: var(--shadow-card);
+  transition: transform .14s cubic-bezier(.2, .8, .3, 1), box-shadow .14s;
+}
+body[data-theme="light"] .sm-card { border-color: var(--tile-bd); box-shadow: var(--tile-shadow); }
+.sm-card:active { transform: scale(.99); }
+.sm-card-ic {
+  flex: 0 0 52px; width: 52px; height: 52px; border-radius: 16px;
+  display: grid; place-items: center; position: relative; color: var(--mc, var(--accent));
+}
+.sm-card-ic::before { content: ''; position: absolute; inset: 0; border-radius: 16px; background: currentColor; opacity: .16; }
+body[data-theme="light"] .sm-card-ic::before { opacity: .22; }
+.sm-card-ic svg { position: relative; display: block; }
+.sm-card-ic.c-sum { --mc: var(--hue-0); }
+.sm-card-ic.c-feed { --mc: var(--hue-3); }
+.sm-card-ic.c-heat { --mc: var(--hue-4); }
+.sm-card-ic.c-attn { --mc: var(--hue-1); }
+.sm-card-ic.c-dyn { --mc: var(--hue-2); }
+.sm-card-t { flex: 1 1 auto; min-width: 0; }
+.sm-card-n { display: block; font-size: 16px; font-weight: 800; color: var(--text); }
+.sm-card-s { display: block; font-size: 12.5px; line-height: 1.35; color: var(--muted); margin-top: 3px; }
+.sm-card-go { flex: 0 0 auto; color: var(--muted); display: grid; place-items: center; }
+
+.sm-tabs {
+  flex: 0 0 auto; display: flex; margin: 8px 16px; padding: 4px;
+  background: var(--seg-bg); border: 1px solid var(--surface-bd);
+  border-radius: var(--seg-r); box-shadow: var(--shadow-card);
+}
+.sm-tab {
+  flex: 1 1 0; text-align: center; padding: 8px; border-radius: calc(var(--seg-r) - 4px);
+  font-size: 14px; font-weight: 700; color: var(--muted);
+}
+.sm-tab.on { background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+/* верхний сегмент «Сводка | Лента» стоит вплотную над «Расходы | Доходы»:
+   две одинаковые планки подряд, поэтому нижнюю прижимаем к верхней */
+.sm-seg { margin-bottom: 0; }
+#smKinds { margin-top: 6px; }
+
+.sm-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--sm-pad) calc(18px + env(safe-area-inset-bottom)); }
+
+.sm-head-b {
+  margin-top: 10px; padding: 16px; border-radius: 24px;
+  background: var(--surface); border: 1px solid var(--surface-bd); box-shadow: var(--shadow-card);
+}
+.sm-big { font-size: 30px; font-weight: 800; letter-spacing: -.6px; }
+.sm-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.sm-sub > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-pct { flex: 0 0 auto; font-weight: 800; color: var(--text); }
+
+.sm-bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; background: var(--track); margin-top: 12px; }
+.sm-bar i { display: block; height: 100%; }
+
+.sm-leg { display: flex; flex-wrap: wrap; gap: 4px 10px; padding-top: 10px; }
+.sm-lg { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: 11px; font-weight: 600; color: var(--muted); }
+.sm-lg b { font-weight: 600; color: inherit; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 3px; display: block; }
+body[data-theme="dark"] .sm-dot { border-radius: 4px; }
+
+.sm-rows { display: flex; flex-direction: column; padding-top: 8px; }
+body[data-theme="light"] .sm-rows { gap: 6px; }
+.sm-rows.sm-dim { opacity: .62; }
+.sm-row.retired { opacity: .62; }
+.sm-row {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 8px 12px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--surface-bd); box-shadow: var(--shadow-card);
+}
+body[data-theme="dark"] .sm-row {
+  padding: 9px 8px; border-radius: 0; background: none; border: 0;
+  border-top: 1px solid var(--hairline); box-shadow: none;
+}
+.sm-row:active { filter: brightness(.97); }
+.sm-ico {
+  flex: 0 0 38px; width: 38px; height: 38px; border-radius: 13px;
+  display: grid; place-items: center; background: var(--tint, var(--tile-neutral)); color: var(--text);
+}
+.sm-ico svg { width: 19px; height: 19px; }
+.sm-ico img { width: 23px; height: 23px; }
+/* цветная фишка (диск + глиф) занимает столько же, сколько иллюстрация */
+.sm-ico .ico-chip { width: 23px; height: 23px; }
+body[data-theme="dark"] .sm-ico { border-radius: 50%; background: rgba(255,255,255,.05); color: var(--hue, var(--text)); }
+.sm-mid { flex: 1 1 auto; min-width: 0; display: block; }
+.sm-l1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; }
+.sm-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-f { flex: 0 0 auto; }
+.sm-rb { display: block; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; margin: 5px 0 3px; }
+body[data-theme="dark"] .sm-rb { height: 5px; }
+.sm-rb i { display: block; height: 100%; border-radius: 3px; background: var(--lv, var(--muted)); }
+.sm-l2 { display: block; font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.sm-more {
+  display: block; width: 100%; min-height: 44px; margin-top: 14px;
+  border-radius: 14px; border: 1px solid var(--btn-ghost-bd); background: var(--btn-ghost);
+  color: var(--muted); font-size: 13px; font-weight: 700;
+}
+.sm-more:active { color: var(--text); }
+
+/* ---------- вкладка «Лента»: операции месяца по дням ----------
+   Строка операции - тот же .txrow, что в карточке кошелька: свайпы влево/вправо
+   и правка приезжают из sheet.js, дублировать их тут нечем. Своё только устройство
+   строки (кошелёк над категорией) и подвал дня. */
+.fd-day { margin-top: 16px; }
+.fd-day:first-child { margin-top: 10px; }
+.fd-h { font-size: 12px; font-weight: 800; color: var(--muted); padding: 0 6px 6px; }
+.fd-card {
+  border-radius: 22px; overflow: hidden; background: var(--sheet);
+  border: 1px solid var(--surface-bd); box-shadow: var(--shadow-card);
+}
+#smBody .fd-card .txfront {
+  min-height: 52px; padding: 10px 14px; gap: 10px;
+  border-top: 1px solid var(--hairline);
+}
+#smBody .fd-card .txrow:first-child .txfront { border-top: 0; }
+.fd-mid { flex: 1 1 auto; min-width: 0; }
+.fd-w { font-size: 11px; font-weight: 600; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fd-n { font-size: 15px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+.fd-f {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+  padding: 7px 8px 0; font-size: 11.5px; font-weight: 700; color: var(--muted);
+}
+/* строка «из Бюджета» в ленте прошлого месяца: не свайпается, не правится (нет .txrow) */
+.fd-card .hro {
+  display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 10px 14px;
+  border-top: 1px solid var(--hairline);
+}
+.fd-card .hro:first-child { border-top: 0; }
+.fd-card .hro .fd-mid { flex: 1 1 auto; min-width: 0; }
+.fd-card .hro .txa { flex: 0 0 auto; font-size: 15px; font-weight: 700; }
+
+.fd-bal { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-ch { flex: 0 0 auto; }
+.fd-ch.pos { color: var(--num-ok); }
+.fd-ch.neg { color: var(--num-over); }
+
+/* ---------- общее для новых экранов ----------
+   Плашка «данные из Бюджета»: у прошлых месяцев факт read-only, приехал с компа. */
+.sm-hist {
+  display: flex; align-items: center; gap: 8px; margin: 12px 0 2px;
+  padding: 9px 12px; border-radius: 14px;
+  background: var(--btn-ghost); border: 1px solid var(--btn-ghost-bd);
+  font-size: 12px; font-weight: 600; color: var(--muted);
+}
+.sm-hist svg { flex: 0 0 auto; }
+
+/* ---------- тепловая карта: дни месяца по тратам ---------- */
+.hm-wrap { padding-top: 12px; }
+.hm-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 6px; }
+.hm-wd { text-align: center; font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.hm-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.hm-cell {
+  position: relative; width: 100%; height: 0; padding: 0 0 100%; display: block;
+  box-sizing: border-box; border: 0; border-radius: 10px; background: var(--track); overflow: hidden;
+}
+.hm-cell.empty { background: transparent; pointer-events: none; }
+.hm-cell > i { position: absolute; inset: 0; background: var(--hue-1); opacity: var(--i, 0); }
+.hm-d { position: absolute; top: 4px; left: 6px; font-size: 10px; font-weight: 700; color: var(--muted); }
+.hm-cell.hot .hm-d { color: var(--text); }
+.hm-cell.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.hm-cell:active { filter: brightness(.97); }
+.hm-legend { display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 11px; font-weight: 600; color: var(--muted); }
+.hm-ramp { flex: 1 1 auto; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--track), var(--hue-1)); }
+.hm-day { margin-top: 16px; }
+.hm-day .fd-h { padding: 0 6px 6px; }
+
+/* ---------- зона внимания: где перерасход ---------- */
+.at-sub { font-size: 11px; font-weight: 800; color: var(--muted); padding: 16px 6px 2px; }
+.at-sub:first-child { padding-top: 10px; }
+.at-row {
+  display: flex; align-items: center; gap: 12px; margin-top: 8px;
+  padding: 10px 12px; border-radius: 18px;
+  background: var(--surface); border: 1px solid var(--surface-bd); box-shadow: var(--shadow-card);
+}
+body[data-theme="dark"] .at-row {
+  margin-top: 0; padding: 10px 8px; border-radius: 0; background: none; border: 0;
+  border-top: 1px solid var(--hairline); box-shadow: none;
+}
+.at-dim { opacity: .62; }
+.at-row.retired { opacity: .62; }
+.at-mid { flex: 1 1 auto; min-width: 0; }
+.at-l1 { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: 14px; font-weight: 700; }
+.at-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.at-fp { flex: 0 0 auto; font-size: 12px; font-weight: 600; color: var(--muted); }
+.at-bar { display: block; height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; margin: 6px 0 4px; }
+.at-bar i { display: block; height: 100%; border-radius: 3px; background: var(--lv, var(--muted)); }
+.at-l2 { display: block; font-size: 11.5px; font-weight: 700; color: var(--muted); }
+.at-l2.over { color: var(--num-over); }
+
+/* ---------- динамика по месяцам: вертикальный список ----------
+   12 строк (Янв..Дек) в столбик, все влезают на 360×760 без прокрутки. В строке:
+   подпись месяца (фикс. ширина), полоса факта (общая шкала — сравнимы), метка плана
+   на полосе и сумма факта справа (nowrap, число не обрезается). */
+.dy-list { padding-top: 14px; display: flex; flex-direction: column; gap: 4px; }
+.dy-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  min-height: 40px; padding: 4px 8px; border-radius: 12px;
+  background: transparent; border: 1px solid transparent;
+}
+.dy-row:active { filter: brightness(.97); }
+.dy-row.on { background: var(--tile-neutral, var(--btn-ghost)); border-color: var(--surface-bd); }
+body[data-theme="dark"] .dy-row.on { background: rgba(255,255,255,.06); border-color: var(--hairline); }
+.dy-m { flex: 0 0 34px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.dy-row.on .dy-m { color: var(--text); font-weight: 800; }
+.dy-track {
+  flex: 1 1 auto; position: relative; height: 14px; border-radius: 7px;
+  background: var(--track); overflow: hidden;
+}
+.dy-fact { display: block; height: 100%; min-width: 2px; border-radius: 7px; background: var(--accent); position: relative; z-index: 0; }
+.dy-row.zero .dy-fact { background: transparent; min-width: 0; }
+.dy-row.over .dy-fact { background: var(--num-over); }
+.dy-row.on .dy-fact { box-shadow: inset 0 0 0 2px var(--accent-strong, var(--accent)); }
+/* метка плана: тонкая вертикальная риска на всю высоту полосы */
+.dy-plan {
+  position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; z-index: 1;
+  background: var(--muted); border-radius: 1px;
+}
+.dy-v {
+  flex: 0 0 auto; min-width: 66px; text-align: right;
+  font-size: 12.5px; font-weight: 800; color: var(--text); white-space: nowrap; line-height: 1;
+}
+.dy-row.zero .dy-v { color: var(--muted); font-weight: 700; }
+.dy-foot { margin-top: 16px; font-size: 11.5px; font-weight: 600; color: var(--muted); padding: 0 6px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.dy-key { display: inline-flex; align-items: center; gap: 6px; }
+.dy-key i { width: 14px; height: 8px; border-radius: 3px; background: var(--accent); display: inline-block; }
+.dy-key.plan i { height: 12px; width: 2px; border-radius: 1px; background: var(--muted); }
+
+/* ---------- экран «Категории» (диалог openCats из edit.js) ---------- */
+/* Плашка вкладок «Расходы/Доходы»: непрозрачная, во всю ширину листа, приклеена к
+   самому верху окна (сразу под язычком-грипом). Список скроллится строго ПОД ней -
+   ничего над плашкой не появляется. Полный вылет по горизонтали: margin -18px гасит
+   боковые поля листа, padding 18px возвращает внутренний отступ. */
+.clr-bar {
+  position: sticky; top: 0; z-index: 8;
+  margin: 0 -18px 10px; padding: 0 18px;
+  background: var(--sheet);
+}
+.clr-tabs {
+  display: flex; margin: 0; padding: 4px;
+  background: var(--seg-bg); border: 1px solid var(--surface-bd);
+  border-radius: var(--seg-r); box-shadow: var(--shadow-card);
+}
+.clr-tab {
+  flex: 1 1 0; text-align: center; padding: 8px; border: 0; background: none;
+  border-radius: calc(var(--seg-r) - 4px); font: inherit; font-size: 14px; font-weight: 700; color: var(--muted);
+}
+.clr-tab.on { background: var(--accent); color: var(--accent-ink); font-weight: 800; }
+.clr-list { display: flex; flex-direction: column; margin-bottom: 12px; }
+.clr-list.clr-dim { opacity: .7; }
+.clrow {
+  display: flex; align-items: center; gap: 12px; width: 100%; text-align: left;
+  padding: 10px 8px; border: 0; background: none; font: inherit; color: var(--text);
+  border-top: 1px solid var(--hairline);
+}
+.clr-list .clrow:first-child { border-top: 0; }
+.clrow:active { filter: brightness(.97); }
+.clr-ic { flex: 0 0 38px; width: 38px; height: 38px; border-radius: 13px; display: grid; place-items: center; background: var(--tint, var(--tile-neutral)); }
+.clr-ic img { width: 24px; height: 24px; }
+.clr-ic svg { width: 20px; height: 20px; }
+.clr-n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.clr-lim { flex: 0 0 auto; font-size: 13px; font-weight: 700; color: var(--muted); }
+.clr-lock { opacity: .7; }
+.clrow.add { justify-content: center; color: var(--accent); font-weight: 800; border-top: 1px solid var(--hairline); }
+.clrow.arch { gap: 10px; }
+.clrow.arch .clr-n { color: var(--muted); }
+.btn.ghost.sm { flex: 0 0 auto; padding: 6px 12px; min-height: 0; height: auto; font-size: 13px; }
+.btn.ghost.wide { width: 100%; margin-top: 6px; }
+
+/* узкая плашка тест-режима вверху меню (S.ui.demo) */
+.demo-bar {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  width: 100%; margin: 0 0 10px; padding: 9px 12px;
+  border: 1px dashed var(--surface-bd); border-radius: 12px;
+  background: var(--seg-bg); color: var(--muted);
+  font: inherit; font-size: 13px; font-weight: 700;
+}
+.demo-bar:active { filter: brightness(.97); }
+.demo-bar svg { flex: 0 0 auto; opacity: .8; }
+
+/* «Есть обновление»: единственный маркер — мигает иконка в плитке «Обновление» */
+@keyframes updBlink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+.mi.has-upd .mi-ic { animation: updBlink 1.1s ease-in-out infinite; color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .mi.has-upd .mi-ic { animation: none; color: var(--accent); } }
+
+/* экран «Полный доступ» (paywall) */
+.pw-lead { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
+.pw-list { margin: 0 0 14px; padding-left: 18px; }
+.pw-list li { margin: 4px 0; font-size: 14px; }
+.pw-price { font-size: 22px; font-weight: 800; color: var(--text); }
+.pw-price span { font-size: 13px; font-weight: 600; color: var(--muted); }
+
+/* премиум-разделы аналитики (доступны в «Полном доступе»): замок на карточках выбора в free */
+.sm-card.premium { position: relative; }
+#summary.sm-free .sm-card.premium { opacity: .85; }
+#summary.sm-free .sm-card.premium::after {
+  content: "🔒"; position: absolute; top: 10px; right: 12px; font-size: 15px; line-height: 1; opacity: .85;
+}
+
+/* блоки в баннере «Полный доступ» */
+.pw-h { font-weight: 800; font-size: 15px; margin: 12px 0 4px; }
+.pw .pw-list { margin: 0 0 4px; padding-left: 20px; }
+.pw-sub { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
+.pw-respect { margin: 12px 0 4px; font-size: 14px; color: var(--muted); }
+/* оплата ещё не подключена: честная строка вместо цены и кнопки «Купить» */
+.pw-note { margin: 12px 0 2px; padding: 10px 12px; border-radius: 12px; background: var(--btn-ghost); border: 1px solid var(--surface-bd); font-size: 13px; line-height: 1.4; color: var(--secondary); }
+
+/* офлайн-активация лицензионным ключом: поле + «Активировать». Без ссылок/контактов. */
+.pw-key { margin: 14px 0 2px; padding-top: 12px; border-top: 1px solid var(--surface-bd); }
+.pw-key-h { font-weight: 800; font-size: 14px; margin-bottom: 4px; color: var(--text); }
+.pw-key-sub { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+.pw-key-row { display: flex; gap: 8px; align-items: stretch; }
+.pw-key-row .inp { flex: 1 1 auto; min-width: 0; }
+.pw-key-row .btn { flex: 0 0 auto; white-space: nowrap; }
+.pw-key-msg { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--secondary); }
+.pw-key-msg.bad { color: var(--num-over); font-weight: 700; }
+
+/* «Восстановить покупку»: тихая ссылка-кнопка под блоком лицензионного ключа */
+.pw-restore { margin: 12px 0 2px; }
+
+/* абзац в «О приложении» */
+.ab-p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: var(--text); }
+.ab-h { font-size: 14px; font-weight: 800; color: var(--text); }
+.ab-lead { color: var(--secondary); }
+
+/* «О приложении»: одно окно на весь экран без вертикальной прокрутки.
+   Лист выше обычного, отступы и шрифты плотнее — автор, контакты и кнопка
+   «Понятно» видны сразу. Всё в области .dlg-about, чтобы не задеть другие окна. */
+#dlg.dlg-about { max-height: 94dvh; }
+#dlg.dlg-about #dlgBody { margin-bottom: 12px; }
+/* окно без скролла — заголовок не липнет (иначе тень налезала бы на текст) */
+#dlg.dlg-about #dlgTitle { position: static; box-shadow: none; }
+#dlg.dlg-about .about { font-size: 13px; line-height: 1.45; }
+#dlg.dlg-about .ab-head { margin-bottom: 8px; }
+#dlg.dlg-about .ab-lead { margin: 0 0 8px; }
+#dlg.dlg-about .ab-h { margin: 9px 0 3px; font-size: 13.5px; }
+#dlg.dlg-about .ab-p { margin: 0 0 4px; font-size: 13px; line-height: 1.4; }
+#dlg.dlg-about .ab-list { margin: 2px 0 4px; padding-left: 18px; }
+#dlg.dlg-about .ab-list li { margin: 1px 0; }
+#dlg.dlg-about .ab-linkrow { margin: 0; }
+#dlg.dlg-about .ab-link { padding: 2px 0; min-height: 0; }
+#dlg.dlg-about .ab-author { margin: 2px 0 0; }
+/* контакты автора: ссылка на сайт */
+.ab-contacts { margin: 3px 0 0; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ab-contacts .ab-link { font-size: 12px; padding: 2px 0; min-height: 0; }
+/* #dlgHint внутри окна «Категории» стоит под вкладками: без бокового margin (тело уже с полями) */
+#dlgBody > .dlg-hint { margin: 0 0 12px; }
+
+/* экран суммы: подпись типа операции + заметная стрелка направления */
+.am-kind { text-align: center; font-size: 14px; font-weight: 800; color: var(--accent); margin: 2px 0 -4px; }
+.am-arrow { color: var(--accent); font-weight: 800; padding: 0 4px; font-size: 1.15em; }
+
+/* серые «+»-плитки добавления в конце лент */
+.addtile { display: flex; flex-direction: column; align-items: center; gap: 6px; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
+.addtile:active { filter: brightness(.97); }
+.add-ring { position: relative; display: grid; place-items: center; border-radius: 50%; border: 2px dashed var(--surface-bd); color: var(--muted); box-sizing: border-box; }
+.add-plus { font-size: 26px; font-weight: 700; line-height: 1; color: var(--muted); }
+.add-cn { color: var(--muted); font-size: 12px; font-weight: 600; }
+/* замок на «+», когда упёрлись в лимит free: тап всё равно откроет баннер, но не внезапно */
+.add-lock { position: absolute; right: -3px; top: -3px; font-size: 13px; line-height: 1; opacity: .85; }
+/* кошельковая «+»-плитка: те же габариты, что .wcard, но пунктирная */
+.addtile-w { position: relative; flex-direction: column; justify-content: center; gap: 4px; background: none; border: 2px dashed var(--surface-bd); }
+.addtile-w .add-plus { font-size: 30px; }
+.addtile-w .add-lock { right: 6px; top: 5px; }
+/* Светлая тема: --surface-bd прозрачен, и пунктирный круг «+» пропадал (плитка сливалась
+   с фоном). Даём ему видимую грань и подложку, чтобы «+» читался как кнопка добавления. */
+body[data-theme="light"] .add-ring,
+body[data-theme="light"] .addtile-w { border-color: rgba(46,43,69,.32); background: var(--surface); }
+body[data-theme="light"] .add-plus { color: var(--secondary); }
+
+/* приветственный онбординг (первый запуск) */
+#onboard { position: fixed; inset: 0; z-index: 999; background: rgba(6,12,15,.72); display: flex; align-items: center; justify-content: center; padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+#onboard[hidden] { display: none; }
+.ob-hint { position: absolute; top: calc(58px + env(safe-area-inset-top)); max-width: 46%; color: #fff; font-size: 12px; line-height: 1.3; }
+.ob-hint b { display: block; font-size: 14px; margin-bottom: 2px; color: var(--accent); }
+.ob-hint span { color: rgba(255,255,255,.8); }
+.ob-menu { left: 14px; text-align: left; }
+.ob-an { right: 14px; text-align: right; }
+.ob-card { width: 100%; max-width: 360px; background: var(--sheet); color: var(--text); border: 1px solid var(--surface-bd); border-radius: 20px; padding: 20px 18px; box-shadow: var(--shadow-up); text-align: center; }
+.ob-ham { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; background: var(--avatar-bg); box-shadow: var(--avatar-glow); margin-bottom: 8px; }
+.ob-ham img { width: 82%; height: 82%; object-fit: contain; }
+.ob-t { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+.ob-p { font-size: 14px; line-height: 1.5; margin: 0 0 8px; }
+.ob-list { text-align: left; margin: 0 0 10px; padding-left: 18px; font-size: 14px; line-height: 1.5; }
+.ob-list li { margin: 3px 0; }
+.ob-dim { color: var(--muted); font-size: 13px; }
+.ob-first { font-weight: 700; }
+.ob-btn { width: 100%; margin-top: 6px; }
+
+/* ---------- планшет и широкий экран: аккуратная колонка по центру ----------
+   Регламент android-app-build-checklist: телефонная вёрстка на относительных единицах на
+   планшете «разъезжается» (4 колонки плиток на всю ширину, огромные кольца, «простыня»).
+   Держим контент колонкой --colw по центру. На телефоне (< --colw) правила - no-op:
+   --side = 0, max-width больше экрана. Полноэкранные слои (аналитика, экран суммы)
+   оставляют фон во всю ширину, а содержимое сжимают боковыми полями --side; нижние листы
+   и окна (диалоги, пейволл, карточка, иконки, перевод) - не шире --sheetw и по центру. */
+:root { --colw: 520px; --sheetw: 560px; --side: max(0px, calc((100vw - var(--colw)) / 2)); }
+#app { width: 100%; max-width: var(--colw); margin-inline: auto; }
+#dlg, #icSheet, #trSheet, #card { max-width: var(--sheetw); margin-inline: auto; }
+#toast { max-width: calc(var(--colw) - 24px); margin-inline: auto; }
+#summary, #amount { padding-left: var(--side); padding-right: var(--side); }
+.fab { right: max(16px, calc(env(safe-area-inset-right) + 12px), calc(var(--side) + 16px)); }
+.ob-menu { left: calc(var(--side) + 14px); }
+.ob-an { right: calc(var(--side) + 14px); }
+.ob-hint { max-width: calc((min(100vw, var(--colw))) * .46); }
+/* пейволл: кнопки столбиком (класс ставит paywall на #dlgBtns, openDlg его сбрасывает).
+   Главная «Купить в RuStore - 990 ₽» сверху во всю ширину - подпись не рвётся на две строки. */
+.dlg-btns.pw-btns { flex-direction: column-reverse; }
+.dlg-btns.pw-btns .btn { flex: 0 0 auto; width: 100%; }

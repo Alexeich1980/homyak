@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Шаблонный external-path со всем корнем внешнего хранилища убран. «Поделиться» из
+     приложения больше нет: бэкап уходит своим плагином SaveFile через системное окно
+     «Сохранить как», FileProvider наружу ничего не отдаёт. Файл оставлен потому, что на
+     него ссылается манифест самого Capacitor; путь сведён к пустому кэшу. -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <cache-path name="my_cache_images" path="." />
+</paths>

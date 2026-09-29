@@ -1,0 +1,37 @@
+Copyright (c) 2026 Alexey Dorokhin / Алексей Дорохин. Все права защищены. All rights reserved.
+
+РУССКИЙ
+
+Исходный код приложения «Хомяк» опубликован только для просмотра и проверки безопасности.
+
+Разрешено:
+- просматривать и изучать код;
+- запускать тесты и собирать приложение на своём устройстве, чтобы проверить, как оно работает.
+
+Запрещено без письменного разрешения правообладателя:
+- распространять код, его части или собранные версии приложения;
+- публиковать изменённые версии и производные работы;
+- использовать код или его части в других продуктах;
+- использовать код в коммерческих целях.
+
+Код предоставляется «как есть», без каких-либо гарантий. Правообладатель не отвечает за убытки, связанные с использованием кода.
+
+Сторонние части (www/vendor/fflate.min.js, шрифты в www/fonts/, Capacitor) распространяются по своим лицензиям.
+
+ENGLISH
+
+The source code of the "Homyak" app is published for viewing and security review only.
+
+Permitted:
+- viewing and studying the code;
+- running the tests and building the app on your own device to verify how it works.
+
+Prohibited without the copyright holder's written permission:
+- distributing the code, any part of it, or built versions of the app;
+- publishing modified versions or derivative works;
+- using the code or any part of it in other products;
+- any commercial use of the code.
+
+The code is provided "as is", without warranty of any kind. The copyright holder is not liable for any damages arising from the use of the code.
+
+Third-party components (www/vendor/fflate.min.js, fonts in www/fonts/, Capacitor) are distributed under their own licenses.

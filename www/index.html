@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0F1F24">
+<title>Хомяк</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-theme="dark">
+
+<div id="app">
+
+  <div id="saveWarn" role="alert" hidden></div>
+
+  <header id="top">
+    <button id="btnMenu" class="avatar" type="button" aria-label="Меню">
+      <img src="hamster.png" alt="" aria-hidden="true">
+    </button>
+
+    <div id="sums" role="button" tabindex="0" aria-label="Сменить месяц">
+      <div class="sum" id="sumBalance"><div class="sl">В кошельках</div><div class="sv">0</div></div>
+      <div class="sum" id="sumSpent"><div class="sl">Потрачено</div><div class="sv">0</div></div>
+      <div class="sum" id="sumRemaining"><div class="sl">Осталось</div><div class="sv">0</div></div>
+    </div>
+
+    <!-- столбики цветные, по уровням заливки плиток (ок / близко / перебор): мимо
+         монохромного глифа хозяин проходил, а такой читается как «про деньги» -->
+    <button id="btnSummary" class="hbtn" type="button" aria-label="Аналитика">
+      <svg class="ic-bars" viewBox="0 0 24 24" width="32" height="32" fill="none" stroke-width="3.4" stroke-linecap="round">
+        <path class="b1" d="M6 20v-7"/><path class="b2" d="M12 20V5"/><path class="b3" d="M18 20v-4"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- В режиме правки шапка уезжает, а на её место встаёт эта полоса: название по
+       центру и большая галочка справа - выход. Нижней кнопки «Готово» больше нет,
+       чтобы подтверждение было там же, где заголовок, а не на другом конце экрана. -->
+  <div id="editBar" hidden>
+    <span class="eb-sp" aria-hidden="true"></span>
+    <div class="eb-t" id="editBarTitle">Правка</div>
+    <button id="btnEditDone" class="eb-ok" type="button" aria-label="Готово">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5 10 17.5 19 7"/></svg>
+    </button>
+  </div>
+
+  <div id="topMonth" aria-live="polite"></div>
+
+  <!-- Заголовок доходов - настоящая кнопка: тап сворачивает поле в одну строку, и
+       освободившаяся высота уходит в сетку расходов. Галочка показывает состояние:
+       смотрит вверх - поле развёрнуто, вниз - свёрнуто. -->
+  <section id="fieldInc" class="field pane" aria-label="Доходы">
+    <button class="ph-t ph-btn" id="incHead" type="button" aria-expanded="true" aria-controls="incBody">
+      <span class="ph-l" id="incHeadText">Доходы</span>
+      <span class="ph-chev" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </span>
+    </button>
+    <div class="inc-body" id="incBody">
+      <div class="pages"></div>
+      <div id="incDots" class="dots" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <!-- точки под лентой кошельков — тот же компонент, что у доходов и расходов:
+       появляются, когда кошельков больше четырёх, и лента едет страницами по четыре -->
+  <section id="fieldWallets" class="field" aria-label="Кошельки">
+    <div class="strip"></div>
+    <div id="walDots" class="dots dots-w" aria-hidden="true"></div>
+  </section>
+
+  <section id="fieldExp" class="field pane" aria-label="Расходы">
+    <div class="ph-t" id="expHead">Расходы</div>
+    <div class="pages"></div>
+    <div id="expDots" class="dots dots-b" aria-hidden="true"></div>
+  </section>
+
+</div>
+
+<!-- Подсказка главного экрана: как записать операцию жестом. Живёт тут, где перенос
+     и происходит (а не в карточке кошелька). Гасится свайпом в любую сторону и больше
+     не показывается; выключатель «Подсказки» в меню убирает её совсем. -->
+<div id="mainHint" hidden>
+  <span class="mh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+  <span class="mh-t">Нажми на кошелёк и, не отпуская, веди пальцем на категорию. Смахни подсказку, чтобы убрать.</span>
+</div>
+
+<!-- Ситуативная подсказка режима правки: тот же фиксированный вид, что и у главной,
+     но живёт только пока включён режим правки. Один раз, гасится свайпом. -->
+<div id="editHint" hidden>
+  <span class="mh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+  <span class="mh-t">Перетаскивай плитки - меняешь порядок. Тап по плитке - переименовать и сменить иконку. Закончить - галочка сверху.</span>
+</div>
+
+<!-- Явная запись операции: кнопка-«плюс» на главном экране. Drag (поднял плитку и
+     понёс) остаётся; это второй, заметный путь для тех, кто жест не нашёл. Тап открывает
+     выбор типа (Расход/Доход/Перевод), дальше - тот же лист суммы, но с выбором кошелька
+     и категории прямо в шапке листа. Прячется, когда поверх главного что-то открыто. -->
+<button id="fabAdd" class="fab" type="button" aria-label="Записать операцию">
+  <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+</button>
+
+<!-- экран суммы -->
+<div id="amount" hidden role="dialog" aria-modal="true" aria-label="Сумма операции">
+
+  <header class="am-head">
+    <button id="amCancel" class="hbtn" type="button" aria-label="Отмена">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+    <div class="am-path"><span id="amFrom"></span><span class="am-arrow" aria-hidden="true">→</span><span id="amTo"></span></div>
+    <span class="am-head-spacer" aria-hidden="true"></span>
+  </header>
+
+  <div class="am-kind" id="amKind" aria-live="polite"></div>
+
+  <div class="am-num">
+    <div id="amMini" class="am-mini"></div>
+    <div id="amExpr" class="am-expr">0 ₽</div>
+  </div>
+
+  <!-- Ситуативная подсказка экрана суммы: один раз, гасится свайпом, подчиняется
+       общему выключателю «Подсказки». -->
+  <div id="amHint" class="am-hint" hidden>
+    <span class="mh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <span class="mh-t">Сумму можно посчитать прямо тут: 150+300. Дату смени внизу. Затем - Подтвердить.</span>
+  </div>
+
+  <div class="am-confirm-wrap">
+    <button id="amConfirm" class="am-confirm" type="button" disabled>Подтвердить</button>
+  </div>
+
+  <div class="am-keys" id="amKeys">
+    <button class="amk" type="button" data-k="1">1</button>
+    <button class="amk" type="button" data-k="2">2</button>
+    <button class="amk" type="button" data-k="3">3</button>
+    <button class="amk op" type="button" data-k="back" aria-label="Стереть">
+      <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-6-7z"/><path d="M12 10l4 4M16 10l-4 4"/></svg>
+    </button>
+    <button class="amk" type="button" data-k="4">4</button>
+    <button class="amk" type="button" data-k="5">5</button>
+    <button class="amk" type="button" data-k="6">6</button>
+    <!-- ÷ рисуем сами, а не буквой: в Manrope (светлая тема) точки у этого знака
+         прилеплены к черте вплотную, и на клавише вместо деления выходит крестик.
+         SVG одинаков в обеих темах и не зависит от того, какой шрифт подставится. -->
+    <button class="amk op" type="button" data-k="÷" aria-label="Разделить">
+      <svg class="ic-div" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M5.6 12h12.8"/><circle cx="12" cy="6.6" r="1.25" fill="currentColor" stroke="none"/><circle cx="12" cy="17.4" r="1.25" fill="currentColor" stroke="none"/></svg>
+    </button>
+    <button class="amk" type="button" data-k="7">7</button>
+    <button class="amk" type="button" data-k="8">8</button>
+    <button class="amk" type="button" data-k="9">9</button>
+    <button class="amk op" type="button" data-k="×" aria-label="Умножить">×</button>
+    <button class="amk" type="button" data-k="," aria-label="Запятая">,</button>
+    <button class="amk" type="button" data-k="0">0</button>
+    <button class="amk op" type="button" data-k="−" aria-label="Минус">−</button>
+    <button class="amk op" type="button" data-k="+" aria-label="Плюс">+</button>
+  </div>
+
+  <div class="am-date" id="amDate">
+    <button class="amd" id="amBtnYest" type="button" data-d="yest">Вчера</button>
+    <button class="amd on" id="amBtnToday" type="button" data-d="today">Сегодня</button>
+    <label class="amd cal" id="amPick">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      <span id="amDateVal" class="am-dval" hidden></span>
+      <input type="date" id="amDateInput" aria-label="Дата операции">
+    </label>
+  </div>
+
+</div>
+
+<!-- карточка кошелька/категории — нижний лист -->
+<div id="cardBg" hidden></div>
+<div id="card" hidden role="dialog" aria-modal="true" aria-labelledby="cardTitle">
+  <div class="sh-grip" aria-hidden="true"></div>
+  <div class="sh-head">
+    <div class="sh-ico" id="cardIco" aria-hidden="true"></div>
+    <div class="sh-tt">
+      <div class="sh-name" id="cardTitle"></div>
+      <div class="sh-sub" id="cardSub"></div>
+    </div>
+    <button id="btnCardClose" class="sh-x" type="button" aria-label="Закрыть карточку">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="sh-amt" id="cardAmt"></div>
+  <div class="sh-acts" id="cardActs"></div>
+  <!-- Ситуативная подсказка кошелька: показывается вместо cardSwipe, когда та погашена
+       или операций ещё нет. Стоит НАД списком, сразу под кнопками: внизу листа её хвост
+       уходил за экран на 375×812. Один раз, гасится свайпом, подчиняется выключателю. -->
+  <div class="sh-hint sh-hint-top" id="cardAdjustHint" hidden>
+    <span class="sh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <span class="sh-ht">Баланс не сходится? «Изменить баланс» задаёт новую точку отсчёта - это не операция и в категорию не попадёт.</span>
+  </div>
+  <div class="card-list" id="cardList"></div>
+  <div class="sh-hint" id="cardHint">
+    <span class="sh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <span class="sh-ht">Потяни строку влево - удалить, вправо - править.</span>
+  </div>
+</div>
+
+<!-- лист «Куда перевести»: тот же набор кошельков, что на главном экране, но плитками
+     и без исходного. Явный путь к переводу вдобавок к жесту «поднял и перенёс». -->
+<div id="trBg" hidden></div>
+<div id="trSheet" hidden role="dialog" aria-modal="true" aria-labelledby="trTitle">
+  <div class="dlg-grip" aria-hidden="true"></div>
+  <div class="ic-head" id="trHead">
+    <div class="tr-tt"><div class="dlg-t" id="trTitle">Куда перевести</div><div class="tr-from" id="trFrom"></div></div>
+    <button id="trClose" class="hbtn" type="button" aria-label="Закрыть выбор кошелька">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="wgrid" id="trGrid"></div>
+</div>
+
+<!-- экран «Аналитика» (summary.js). data-view: chooser | summary | feed. -->
+<div id="summary" hidden role="dialog" aria-modal="true" aria-label="Аналитика" data-view="chooser">
+  <header class="sm-head">
+    <!-- слева: «к выбору» - вернуться на две карточки; виден только внутри экрана -->
+    <button id="smToChoose" class="hbtn sm-lead" type="button" aria-label="К выбору">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <div class="sm-center">
+      <!-- на экране выбора - заголовок, внутри «Сводки»/«Ленты» - навигация по месяцу -->
+      <div class="sm-title" id="smTitle">Аналитика</div>
+      <div class="sm-mo">
+        <button id="smPrev" class="sm-nav" type="button" aria-label="Предыдущий месяц">‹</button>
+        <div class="sm-ml" id="smMonth" aria-live="polite"></div>
+        <button id="smNext" class="sm-nav" type="button" aria-label="Следующий месяц">›</button>
+      </div>
+    </div>
+    <button id="smBack" class="hbtn" type="button" aria-label="Закрыть">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </header>
+
+  <!-- экран выбора: две большие карточки, каждая ведёт на свой экран -->
+  <div class="sm-choose" id="smChoose">
+    <button class="sm-card" id="smGoSummary" type="button">
+      <span class="sm-card-ic c-sum" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9v9z"/><path d="M12 3a9 9 0 0 1 9 9h-9z"/></svg>
+      </span>
+      <span class="sm-card-t">
+        <span class="sm-card-n">Сводка месяца</span>
+        <span class="sm-card-s">движение денег, по категориям</span>
+      </span>
+      <span class="sm-card-go" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+    <button class="sm-card" id="smGoFeed" type="button">
+      <span class="sm-card-ic c-feed" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 12h11M4 18h7"/><circle cx="19" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="14.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <span class="sm-card-t">
+        <span class="sm-card-n">Лента событий</span>
+        <span class="sm-card-s">все операции месяца по дням</span>
+      </span>
+      <span class="sm-card-go" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+    <button class="sm-card premium" id="smGoHeat" type="button">
+      <span class="sm-card-ic c-heat" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9h17M8.5 4.5v-2M15.5 4.5v-2"/><rect x="6.5" y="11.5" width="3" height="3" rx="0.7" fill="currentColor" stroke="none"/><rect x="14.5" y="11.5" width="3" height="3" rx="0.7" fill="currentColor" stroke="none" opacity=".5"/><rect x="10.5" y="15.5" width="3" height="3" rx="0.7" fill="currentColor" stroke="none" opacity=".8"/></svg>
+      </span>
+      <span class="sm-card-t">
+        <span class="sm-card-n">Тепловая карта</span>
+        <span class="sm-card-s">дни месяца по тратам</span>
+      </span>
+      <span class="sm-card-go" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+    <button class="sm-card premium" id="smGoAttn" type="button">
+      <span class="sm-card-ic c-attn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21 19H3z"/><path d="M12 9.5v4.5"/><circle cx="12" cy="16.6" r="1.05" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <span class="sm-card-t">
+        <span class="sm-card-n">Зона внимания</span>
+        <span class="sm-card-s">где перерасход</span>
+      </span>
+      <span class="sm-card-go" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+    <button class="sm-card premium" id="smGoDyn" type="button">
+      <span class="sm-card-ic c-dyn" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V4"/><path d="M4 20h16"/><rect x="7" y="12" width="3" height="5" rx="0.6" fill="currentColor" stroke="none"/><rect x="12" y="8" width="3" height="9" rx="0.6" fill="currentColor" stroke="none"/><rect x="17" y="14" width="3" height="3" rx="0.6" fill="currentColor" stroke="none"/></svg>
+      </span>
+      <span class="sm-card-t">
+        <span class="sm-card-n">Динамика по месяцам</span>
+        <span class="sm-card-s">расходы за год</span>
+      </span>
+      <span class="sm-card-go" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+  </div>
+
+  <div class="sm-tabs" id="smKinds" role="tablist">
+    <button class="sm-tab on" type="button" role="tab" data-kind="exp">Расходы</button>
+    <button class="sm-tab" type="button" role="tab" data-kind="inc">Доходы</button>
+  </div>
+  <div class="sm-body" id="smBody"></div>
+</div>
+
+<div id="menuBg" hidden></div>
+<nav id="menu" aria-hidden="true">
+  <div class="menu-head">
+    <!-- хомяк из hamster.png, а не icon-512.png: та лежит в DEV_ONLY и в APK не едет,
+         на телефоне вместо иконки была битая картинка -->
+    <span class="menu-app" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <div class="menu-title">Хомяк<span class="menu-ver" id="menuVer"></span><span class="tier-chip" id="menuTier" hidden></span></div>
+    <button id="btnMenuClose" class="hbtn" type="button" aria-label="Закрыть меню">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="menu-body">
+
+    <!-- Плашка тест-режима: узкая, во всю ширину, вверху меню. Есть только пока в
+         приложении лежат демо-данные (S.ui.demo); после «Очистить демо» исчезает. -->
+    <button class="demo-bar" id="demoBar" type="button" hidden>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>
+      <span>Очистить демо-данные</span>
+    </button>
+
+    <!-- Порядок плиток задан хозяином, ровной сеткой по два: связь и вид, обновление
+         и кошельки, звук и вибрация, подсказки и «О приложении», бэкап и восстановление.
+         Пустых половинок и плиток во всю ширину нет. Карточки-статуса тут больше нет:
+         счётчик неотправленных живёт значком на плитке синхронизации, «есть обновление»
+         - точкой на своей. -->
+    <div class="menu-list">
+      <button class="mi c-purple" id="mTheme" type="button">
+        <span class="mi-ic mi-sw2" id="mThemeSwatch" aria-hidden="true"></span>
+        <span class="mi-t">Тема</span><span class="mi-s" id="mThemeInfo">Ночная</span>
+      </button>
+      <button class="mi c-blue" id="mUpdate" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8"/><path d="M12 7.4v7.2"/><path d="m8.6 11.2 3.4 3.4 3.4-3.4"/></svg></span>
+        <span class="mi-t">Обновление</span><span class="mi-s" id="mUpdateInfo"></span>
+      </button>
+      <button class="mi c-teal" id="mCats" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h10M4 18h7"/><circle cx="18.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="18.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="14.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg></span><span class="mi-t">Настроить категории</span><span class="mi-s" id="mCatsInfo"></span>
+      </button>
+      <button class="mi c-yellow" id="mWallets" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3"/><path d="M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-4"/><rect x="14" y="11" width="7" height="5" rx="1"/><circle cx="17" cy="13.5" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="mi-t">Настроить кошельки</span><span class="mi-s" id="mWalletsInfo"></span>
+      </button>
+      <button class="mi c-pink" id="mSound" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z"/><path d="M15.6 9.6a3.4 3.4 0 0 1 0 4.8"/><path d="M18.2 7a7 7 0 0 1 0 10"/></svg></span><span class="mi-sw" id="mSoundSw" aria-hidden="true"><i></i></span>
+        <span class="mi-t">Звук</span><span class="mi-s" id="mSoundInfo">вкл</span>
+      </button>
+      <button class="mi c-coral" id="mHaptic" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="3" width="7" height="18" rx="2.2"/><path d="M10.8 6h2.4"/><path d="M5 9.5v5M19 9.5v5"/><path d="M2.2 11v2M21.8 11v2"/></svg></span><span class="mi-sw" id="mHapticSw" aria-hidden="true"><i></i></span>
+        <span class="mi-t">Вибрация</span><span class="mi-s" id="mHapticInfo">вкл</span>
+      </button>
+      <button class="mi c-teal" id="mHints" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1-.9 1.7v.5h-5.4v-.5c0-.7-.3-1.2-.9-1.7A6 6 0 0 1 12 3z"/></svg></span><span class="mi-sw" id="mHintsSw" aria-hidden="true"><i></i></span>
+        <span class="mi-t">Подсказки</span><span class="mi-s" id="mHintsInfo">вкл</span>
+      </button>
+      <button class="mi c-grey" id="mAbout" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8"/><path d="M12 11.2v5.4"/><circle cx="12" cy="7.8" r="1.05" fill="currentColor" stroke="none"/></svg></span><span class="mi-t">О приложении</span><span class="mi-s">Как пользоваться, автор</span>
+      </button>
+      <button class="mi c-green" id="mBackup" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4h9L20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 5 18.5z"/><path d="M8.5 4v5h6V4"/><path d="M8 20v-6h8v6"/></svg></span><span class="mi-t">Бэкап в файл</span><span class="mi-s">сохранить данные</span>
+      </button>
+      <button class="mi c-grey" id="mRestore" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5v5h5"/><path d="M4.9 10.2A8 8 0 1 1 4.2 14"/><path d="M12 8v4.4l3 1.8"/></svg></span><span class="mi-t">Восстановить из файла</span><span class="mi-s">из копии</span>
+      </button>
+    </div>
+
+  </div>
+  <input type="file" id="fileRestore" accept=".json" hidden>
+</nav>
+
+<!-- приветственный онбординг при первом запуске (логика — maybeOnboard) -->
+<div id="onboard" hidden role="dialog" aria-modal="true" aria-label="Знакомство с приложением">
+  <div class="ob-hint ob-menu"><b>↖ Меню</b><span>кошельки, категории, темы, обновление</span></div>
+  <div class="ob-hint ob-an"><b>Аналитика ↗</b><span>сводка, лента, графики</span></div>
+  <div class="ob-card">
+    <span class="ob-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <div class="ob-t">Добро пожаловать в «Хомяк»!</div>
+    <div class="ob-p">Операции записываются <b>перетаскиванием плиток</b>. Нажми на плитку и, не отпуская, веди пальцем:</div>
+    <ul class="ob-list">
+      <li>кошелёк → на категорию расхода - это расход</li>
+      <li>источник дохода (зарплата, аванс) → на кошелёк - это доход</li>
+      <li>кошелёк → на кошелёк - перевод</li>
+    </ul>
+    <div class="ob-p ob-first">Начни с главного: задай баланс кошельков (тап по кошельку) и, если хочешь, месячные лимиты категорий.</div>
+    <div class="ob-p ob-dim">Кошельки, категории и лимиты настраиваются в меню - хомяк сверху слева. Аналитика - кнопка справа.</div>
+    <button id="obDone" class="btn primary ob-btn" type="button">Понятно, начать</button>
+  </div>
+</div>
+
+<div id="dlgBg" hidden></div>
+<div id="dlg" hidden role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+  <div class="dlg-grip" aria-hidden="true"></div>
+  <div class="dlg-t" id="dlgTitle"></div>
+  <div class="dlg-b" id="dlgBody"></div>
+  <!-- Ситуативная подсказка внутри окна (напр. «Категории»): текст ставит openDlg по
+       o.hint. Один раз, гасится свайпом, подчиняется выключателю. -->
+  <div class="dlg-hint" id="dlgHint" hidden>
+    <span class="dh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <span class="dh-t"></span>
+  </div>
+  <div class="dlg-btns" id="dlgBtns"></div>
+</div>
+
+<!-- лист выбора иконки: выезжает ПОВЕРХ формы, форма под ним остаётся целой -->
+<div id="icBg" hidden></div>
+<div id="icSheet" hidden role="dialog" aria-modal="true" aria-labelledby="icTitle">
+  <div class="dlg-grip" aria-hidden="true"></div>
+  <div class="ic-head">
+    <div class="dlg-t" id="icTitle">Иконка</div>
+    <button id="icClose" class="hbtn" type="button" aria-label="Закрыть выбор иконки">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="icgrid" id="icGrid"></div>
+</div>
+
+<div id="toast" hidden role="status">
+  <span id="toastText"></span>
+  <button id="toastBtn" class="tbtn" type="button" hidden></button>
+</div>
+
+<script src="version.js"></script>
+<script src="capacitor.js"></script>
+<script src="boot.js"></script>
+<script src="native.js"></script>
+<script src="engine.js"></script>
+<script src="seed.js"></script>
+<script src="access.js"></script>
+<script src="license.js"></script>
+<script src="pay-config.js"></script>
+<script src="pay.js"></script>
+<script src="icons.js"></script>
+<script src="sound.js"></script>
+<script src="ui.js"></script>
+<script src="sheet.js"></script>
+<script src="edit.js"></script>
+<script src="summary.js"></script>
+<script src="purchase.js"></script>
+<script src="anim.js"></script>
+<script src="backup.js"></script>
+<script src="update.js"></script>
+<script src="selftest.js"></script>
+</body>
+</html>

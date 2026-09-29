@@ -1,0 +1,12 @@
+# LF в исходниках: часть тестов читает файлы построчно; без этого core.autocrlf=true вернёт CRLF при checkout
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.apk binary
+*.aar binary
+*.jar binary
+*.zip binary
+*.woff2 binary
+*.pdf binary
+*.ico binary

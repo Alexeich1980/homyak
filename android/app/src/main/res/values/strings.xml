@@ -1,0 +1,13 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Хомяк</string>
+    <string name="title_activity_main">Хомяк</string>
+    <string name="package_name">ru.dorokhin.budgetphone</string>
+    <string name="custom_url_scheme">ru.dorokhin.budgetphone</string>
+    <!-- RuStore Pay: идентификатор приложения из RuStore Консоли. Руками не править: вписывается
+         одной командой вместе с www/pay-config.js (CONSOLE_APP_ID):
+           node build-apk.js с ключами store и app-id=ID (см. RELEASE.md)
+         Рассинхрон двух мест валит сборку. При заглушке платежи не инициализируются: покупка
+         отвечает «не сконфигурировано», стор-сборка помечается КАНДИДАТОМ. -->
+    <string name="rustore_console_app_id">2063760325</string>
+</resources>

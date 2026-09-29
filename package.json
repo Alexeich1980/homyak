@@ -1,0 +1,26 @@
+{
+  "name": "homyak",
+  "version": "1.0.1",
+  "private": true,
+  "description": "Хомяк: учёт личных финансов, автономные категории и лимиты (RuStore)",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "cap:sync": "npx cap sync android",
+    "apk:test": "node build-apk.js",
+    "apk:release": "node build-apk.js --release",
+    "apk:store": "node build-apk.js --store"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.2",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/core": "^6.2.2",
+    "@capacitor/filesystem": "^6.0.4",
+    "@capacitor/haptics": "^6.0.3",
+    "fflate": "^0.8.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.2",
+    "@fontsource/manrope": "^5.3.0",
+    "@fontsource/nunito-sans": "^5.3.0"
+  }
+}

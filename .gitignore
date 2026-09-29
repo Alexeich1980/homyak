@@ -1,0 +1,25 @@
+# Зависимости и сборка
+node_modules/
+out/
+build/
+android/.gradle/
+android/build/
+android/app/build/
+android/capacitor-cordova-android-plugins/
+android/local.properties
+*.apk
+*.aab
+
+# Ключи подписи и лицензий автора: никогда не публикуются
+keys/
+*.jks
+*.keystore
+tools/
+.env
+.env.*
+
+# Служебное
+*.log
+.idea/
+.DS_Store
+Thumbs.db
