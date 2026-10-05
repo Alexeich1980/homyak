@@ -32,3 +32,17 @@ test('topNotes отдаёт заметки текущего релиза, а н�
   // человеческая пунктуация: без длинного тире в видимых заметках
   assert.equal(notes.indexOf('—'), -1, 'в заметках длинное тире «—»');
 });
+
+// Независимый пересчёт «верхнего раздела»: построчно, без регулярок topNotes - всё между
+// первой и второй строкой, начинающейся с «## ». Ловит регрессии нарезки в topNotes
+// (захват заголовка, потеря первой/последней строки, выход за второй раздел).
+test('topNotes = текст между первым и вторым заголовком «##» (пересчёт построчно)', () => {
+  const lines = fs.readFileSync(CHANGELOG, 'utf8').replace(/\r\n/g, '\n').split('\n');
+  const heads = [];
+  lines.forEach((l, i) => { if (l.slice(0, 3) === '## ') heads.push(i); });
+  assert.ok(heads.length >= 2, 'в CHANGELOG меньше двух разделов «## » - сверять нарезку не на чем');
+  const expected = lines.slice(heads[0] + 1, heads[1]).join('\n').trim();
+  const got = L.topNotes(CHANGELOG).replace(/\r\n/g, '\n');
+  assert.ok(expected.length > 0, 'верхний раздел пуст');
+  assert.equal(got, expected);
+});

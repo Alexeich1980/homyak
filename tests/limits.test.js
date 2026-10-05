@@ -12,11 +12,34 @@ test('явный лимит 0 при факте = over (красный)', () => 
   assert.strictEqual(Engine.fill(100, 0).level, 'over');
 });
 
+// Самопроверка в браузере сторожит ту же границу на живой плитке. Раньше она брала планы
+// с ПК (S.plans), которых в автономной версии нет, и молча засчитывалась - так пропустила
+// смену правила 100 %. Держим её на лимитах и на жёлтом для ровно 100 %.
+test('selftest: проверка 100 % идёт на лимитах и ждёт жёлтый', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'www', 'selftest.js'), 'utf8');
+  const at = src.indexOf("add('заливка: ровно 100 %");
+  assert.ok(at > 0, 'в selftest нет проверки границы 100 %');
+  const body = src.slice(at, src.indexOf('\n});', at));
+  assert.ok(!/S\.plans/.test(body), 'проверка снова завязана на планы с ПК - в автономной версии она пустая');
+  assert.ok(/Engine\.setLimit\(/.test(body), 'проверка не ставит лимит');
+  assert.ok(body.includes("'warn', 'движок на 100 %'"), 'проверка не ждёт жёлтый на ровно 100 %');
+});
+
+// Во всём selftest планов с ПК быть не должно: в автономной версии их нет, и проверка на
+// них превращается в пустую «засчитано» (так три проверки страниц и архива ничего не ловили).
+test('selftest: ни одной проверки на планах с ПК', () => {
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'www', 'selftest.js'), 'utf8');
+  assert.ok(!/S\.plans/.test(src), 'в selftest снова есть S.plans - проверка на нём в автономной версии пустая');
+  assert.ok(!/Engine\.(monthIndex|cats)\(/.test(src), 'в selftest снова вызов движка личного Хомяка (monthIndex/cats)');
+});
+
 test('пороги заливки: none/ok/warn/over', () => {
   assert.strictEqual(Engine.fill(0, 1000).level, 'none');
   assert.strictEqual(Engine.fill(500, 1000).level, 'ok');
   assert.strictEqual(Engine.fill(800, 1000).level, 'warn');
-  assert.strictEqual(Engine.fill(1000, 1000).level, 'over'); // ровно 100% — уже красный
+  assert.strictEqual(Engine.fill(1000, 1000).level, 'warn'); // ровно 100% — жёлтый (решение 29.09.2026)
+  assert.strictEqual(Engine.fill(1000.01, 1000).level, 'over'); // копейка сверх — красный
+  assert.strictEqual(Engine.fill(333.33 + 333.33 + 333.34, 1000).level, 'warn'); // плавающая точка не краснит ровный план
 });
 
 test('setLimit / catLimit / удаление лимита', () => {
@@ -148,4 +171,62 @@ test('fillInc: план 0 при живом факте → ok (позитив), 
 test('fillInc: НИКОГДА не возвращает over (красный) при любых входах', () => {
   const cases = [[0, 0], [0, 100], [100, 0], [100, 100], [1e9, 1], [1, 1e9], [50, 100]];
   for (const [f, p] of cases) assert.notStrictEqual(Engine.fillInc(f, p).level, 'over');
+});
+
+// ---------- лимиты сами переезжают в новый месяц (решение 01.10.2026) ----------
+test('carryLimits: новый месяц получает лимиты ближайшего прошлого, без архивных', () => {
+  const S = Engine.defaultState();
+  const a = Engine.addCategory(S, 'exp', { name: 'Еда' });
+  const b = Engine.addCategory(S, 'exp', { name: 'Кафе' });
+  const z = Engine.addCategory(S, 'inc', { name: 'Зарплата' });
+  Engine.setLimit(S, '2026-08', a.id, 1);                 // старый месяц - не источник
+  Engine.setLimit(S, '2026-09', a.id, 30000);
+  Engine.setLimit(S, '2026-09', b.id, 8000);
+  Engine.setLimit(S, '2026-09', z.id, 140000);             // план дохода едет тоже
+  Engine.archiveCategory(S, b.id);
+  assert.strictEqual(Engine.carryLimits(S, '2026-10'), 2);
+  assert.deepStrictEqual(S.limits['2026-10'], { [a.id]: 30000, [z.id]: 140000 });
+  assert.deepStrictEqual(S.limits['2026-09'], { [a.id]: 30000, [b.id]: 8000, [z.id]: 140000 }, 'источник не тронут');
+  assert.strictEqual(Engine.fill(30000, Engine.catLimit(S, a.id, '2026-10')).level, 'warn');
+});
+
+test('carryLimits: свои лимиты месяца не перезаписывает; перенос один раз; без источника - ничего', () => {
+  const S = Engine.defaultState();
+  const a = Engine.addCategory(S, 'exp', { name: 'Еда' });
+  Engine.setLimit(S, '2026-09', a.id, 30000);
+  Engine.setLimit(S, '2026-10', a.id, 5);
+  assert.strictEqual(Engine.carryLimits(S, '2026-10'), 0);
+  assert.strictEqual(S.limits['2026-10'][a.id], 5, 'свой лимит октября на месте');
+
+  assert.strictEqual(Engine.carryLimits(S, '2026-11'), 1, 'ближайший прошлый - октябрь');
+  assert.strictEqual(S.limits['2026-11'][a.id], 5);
+  Engine.setLimit(S, '2026-11', a.id, null);               // хозяин сам убрал все лимиты ноября
+  assert.strictEqual(Engine.carryLimits(S, '2026-11'), 0, 'убранные хозяином лимиты не возвращаются');
+  assert.strictEqual(S.limits['2026-11'], undefined);
+
+  const E = Engine.defaultState();
+  assert.strictEqual(Engine.carryLimits(E, '2026-10'), 0);
+  assert.deepStrictEqual(E.limitsCarried, {}, 'без источника месяц не помечается');
+  assert.strictEqual(Engine.carryLimits(S, 'мусор'), 0);
+});
+
+test('carryLimits: пометка переноса переживает сохранение и чистится от мусора', () => {
+  const S = Engine.migrate({ limitsCarried: { '2026-10': true, '2026-13': true, 'x': true, '2026-11': 1 } });
+  assert.deepStrictEqual(S.limitsCarried, { '2026-10': true });
+  assert.deepStrictEqual(Engine.migrate({}).limitsCarried, {});
+});
+
+test('carryLimits: месяц со своими лимитами помечается - убрал последний, прошлые не вернутся', () => {
+  const S = Engine.defaultState();
+  const a = Engine.addCategory(S, 'exp', { name: 'Еда' });
+  const b = Engine.addCategory(S, 'exp', { name: 'Кафе' });
+  Engine.setLimit(S, '2026-09', a.id, 30000);
+  Engine.setLimit(S, '2026-09', b.id, 8000);
+  Engine.setLimit(S, '2026-10', a.id, 25000);              // задано руками (или версией 1.0.1)
+  assert.strictEqual(Engine.carryLimits(S, '2026-10'), 0);
+  assert.strictEqual(S.limitsCarried['2026-10'], true, 'месяц со своими лимитами не помечен');
+  Engine.setLimit(S, '2026-10', a.id, null);               // хозяин убрал последний лимит
+  assert.strictEqual(S.limits['2026-10'], undefined);
+  assert.strictEqual(Engine.carryLimits(S, '2026-10'), 0, 'лимиты сентября вернулись после удаления');
+  assert.strictEqual(S.limits['2026-10'], undefined);
 });

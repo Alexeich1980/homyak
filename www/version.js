@@ -4,4 +4,4 @@
    versionName/versionCode в android/app/build.gradle). Руками не правь -
    правь package.json. В репозитории лежит собранным, чтобы версия была видна
    и в браузерном превью. */
-window.APP_VERSION = '1.0.1';
+window.APP_VERSION = '1.0.2';

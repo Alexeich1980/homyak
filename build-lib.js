@@ -330,6 +330,16 @@ function readAppIdFiles(payConfigPath, stringsXmlPath) {
 
 // Режимы несовместимы: reel (промо, полный доступ) нельзя смешивать с релизом/стором -
 // иначе reel-ветка flagsTag молча перекрыла бы релизные флаги.
+// Прямой раздачи нет (решение Алексея 27.09.2026): платный «Хомяк» у людей только из
+// RuStore. Релиз «напрямую» (--release без --store) и веб-обновления с канала не собираем.
+// Тест-сборка (без флагов) остаётся - она только Алексею на проверку.
+function checkDistribution(mode) {
+  if (mode && mode.release && !mode.store) {
+    throw new Error('Прямой раздачи нет (решение 27.09.2026): «Хомяк» у людей только из RuStore.\n' +
+      'Для стора: node build-apk.js --store --app-id=2063760325   Себе на проверку: node build-apk.js');
+  }
+}
+
 function checkModeConflict(mode, reel) {
   if (reel && mode && (mode.release || mode.store)) {
     throw new Error('--reel нельзя совмещать с --release/--store: reel-сборка даёт полный доступ и только для съёмки');
@@ -379,10 +389,94 @@ function verifyApk(apkBuf, opts) {
   return { jsId: jsId, arscEnc: arscEnc, so: so.length, soList: so };
 }
 
+// ---------- уборка out/: хранить последние N версий, не больше ----------
+// Каждая сборка кладёт в out/<папка>/ файлы с версией в имени (<имя>-1.0.1.apk,
+// www-1.0.1.zip), и без уборки они копятся сотнями мегабайт. Оставляем `keep` новейших
+// в каждой группе «префикс + хвост + расширение» (homyak-*.apk, www-*.zip,
+// homyak-*-кандидат.apk - разные группы). Новизна - по semver числами: 0.1.10 новее
+// 0.1.9 (не по строке и не по mtime). Не удаляем НИКОГДА:
+//   - файлы без версии в имени (алиасы последней сборки, update.json, last-apk.json,
+//     published.json);
+//   - то, на что ссылается published.json этой папки: его пишет publish-update.py
+//     ТОЛЬКО после успешной заливки на канал, это и есть «что сейчас стоит у людей»,
+//     даже если оно старше последних N (1.0.1 опубликован, потом собраны 1.0.2..1.0.4
+//     без публикации - 1.0.1 живёт);
+//   - то, на что ссылаются update.json / last-apk.json. ВНИМАНИЕ: это НЕ канал - сборка
+//     переписывает их на себя ДО уборки, поэтому они защищают только текущую сборку
+//     (в том числе когда она самая младшая версия в папке). Опубликованное защищает
+//     только published.json;
+//   - если любой из манифестов не читается - бросаем, не удалив ничего (лишний файл
+//     лучше живого удалённого).
+// Зовётся только в самом конце успешной сборки. Возвращает имена удалённых. Если удаление
+// упало посередине, ошибка несёт e.removed - что уже удалено, вызывающий это печатает.
+const VERSIONED_RE = /^(.+?)-(\d+)\.(\d+)\.(\d+)((?:-[^.]+)?)\.(apk|aab|zip)$/;
+const OUT_MANIFESTS = ['update.json', 'last-apk.json', 'published.json'];
+
+function cmpSemver(a, b) {
+  for (let i = 0; i < 3; i++) { if (a[i] !== b[i]) return a[i] - b[i]; }
+  return 0;
+}
+
+// все имена файлов, упомянутые в манифестах папки (из URL берём последний сегмент)
+function manifestRefs(dir) {
+  const refs = new Set();
+  OUT_MANIFESTS.forEach((m) => {
+    const p = path.join(dir, m);
+    if (!fs.existsSync(p)) return;
+    let data;
+    try { data = JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) {
+      throw new Error('не читается ' + m + ' (' + e.message + ') - уборка отменена, ничего не удалено');
+    }
+    (function walk(v) {
+      if (typeof v === 'string') {
+        let name = v.split(/[?#]/)[0].split(/[\/]/).pop();
+        try { name = decodeURIComponent(name); } catch (e) { /* как есть */ }
+        refs.add(name);
+      } else if (v && typeof v === 'object') {
+        Object.keys(v).forEach((k) => walk(v[k]));
+      }
+    })(data);
+  });
+  return refs;
+}
+
+function pruneOldVersions(dir, keep) {
+  keep = keep == null ? 3 : keep;
+  if (!fs.existsSync(dir)) return [];
+  const refs = manifestRefs(dir);
+  const groups = {};
+  fs.readdirSync(dir, { withFileTypes: true }).forEach((e) => {
+    if (!e.isFile()) return;
+    const m = e.name.match(VERSIONED_RE);
+    if (!m) return;
+    const key = m[1] + '|' + m[5] + '|' + m[6];
+    (groups[key] = groups[key] || []).push({ name: e.name, v: [+m[2], +m[3], +m[4]] });
+  });
+  const removed = [];
+  try {
+    Object.keys(groups).forEach((key) => {
+      groups[key].sort((a, b) => cmpSemver(b.v, a.v))
+        .slice(keep)
+        .forEach((f) => {
+          if (refs.has(f.name)) return;
+          fs.unlinkSync(path.join(dir, f.name));
+          removed.push(f.name);
+        });
+    });
+  } catch (e) {
+    const err = new Error('удаление прервано (' + e.message + '); уже удалено: ' +
+      (removed.length ? removed.slice().sort().join(', ') : 'ничего'));
+    err.removed = removed.slice().sort();
+    throw err;
+  }
+  return removed.sort();
+}
+
 module.exports = {
   DEV_ONLY, FLAG_MARKER, rmrf, copyClean, listFiles, makeShip, flagsTag, buildMode,
   versionCodeOf, writeFilesJson, zipShip, selfCheckZip, sha256hex, stampWeb, readVersion, topNotes,
   OTA_MTIME, CORE_IN_BUNDLE,
   APP_ID_PLACEHOLDER, validAppId, parseAppIdArg, readAppIdJs, readAppIdXml, stampAppIdJs, stampAppIdXml,
-  appIdState, stampAppIdFiles, readAppIdFiles, checkModeConflict, storeOutNames, verifyApk
+  appIdState, stampAppIdFiles, readAppIdFiles, checkModeConflict, checkDistribution, storeOutNames, verifyApk,
+  pruneOldVersions
 };

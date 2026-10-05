@@ -1,6 +1,6 @@
 {
   "name": "homyak",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": true,
   "description": "Хомяк: учёт личных финансов, автономные категории и лимиты (RuStore)",
   "scripts": {

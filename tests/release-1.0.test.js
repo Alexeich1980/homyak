@@ -7,7 +7,7 @@
       deeplink RuStore Pay настроен, клиент SDK берётся getInstance (провайдер уже создал).
    3) Пейволл: без ссылок/контактов, строки RuStore, дефис вместо «—».
    4) Планшет: колонка по центру, листы не во всю ширину.
-   5) Версия 1.0.0 → versionCode 20001, minSdk 23. */
+   5) Версия: инварианты versionCode от package.json (без ручных пинов), minSdk 23. */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -367,15 +367,42 @@ test('планшет: #app - колонка 480-560px по центру; лис�
 
 // ---------- 5. версия ----------
 
-test('версия 1.0.1: versionCode стор 20003 (> альфы 1.0.0 = 20001), тест 20002; minSdk 23, targetSdk 34', () => {
-  assert.equal(require('../package.json').version, '1.0.1');
-  assert.equal(L.versionCodeOf('1.0.1', true), 20003);
-  assert.equal(L.versionCodeOf('1.0.1', false), 20002);
+// Версия не пинится руками (раньше тут стояли '1.0.1'/20003 и их надо было править на каждый
+// релиз). Вместо пинов - инварианты: всё берётся из package.json и сверяется между собой.
+// Мутация (проверено вручную): versionCode 20002 в android/app/build.gradle - красный.
+test('версия: формула versionCode (история 1.0.0/1.0.1 и ряд 0.1.x), minSdk 23, targetSdk 34', () => {
   assert.equal(L.versionCodeOf('1.0.0', true), 20001);
   assert.equal(L.versionCodeOf('1.0.0', false), 20000);
+  assert.equal(L.versionCodeOf('1.0.1', true), 20003);
+  assert.equal(L.versionCodeOf('1.0.1', false), 20002);
+  assert.equal(L.versionCodeOf('0.1.6', true), 213);
+  assert.equal(L.versionCodeOf('0.1.7', false), 214);
   const v = rd('android/variables.gradle');
   assert.ok(/minSdkVersion = 23/.test(v));
   assert.ok(/targetSdkVersion = 34/.test(v));
+});
+
+test('версия package.json: стор-код = тест-код + 1, нечётный, больше альфы 1.0.0 (20001 занят в RuStore)', () => {
+  const ver = require('../package.json').version;
+  assert.match(ver, /^\d+\.\d+\.\d+$/);
+  const store = L.versionCodeOf(ver, true), testCode = L.versionCodeOf(ver, false);
+  assert.equal(store, testCode + 1);
+  assert.equal(store % 2, 1, 'стор-код ' + store + ' чётный');
+  assert.ok(store > 20001, 'стор-код ' + store + ' не больше альфы 1.0.0 = 20001: RuStore его не примет');
+});
+
+// Коммитится build.gradle со СТОР-кодом: после тест-сборки там тест-код, и этот тест
+// должен покраснеть - это напоминание вернуть стор-сборку перед коммитом.
+test('версия: build.gradle, www/version.js, www/files.json = package.json (gradle - стор-код)', () => {
+  const ver = require('../package.json').version;
+  const g = rd('android/app/build.gradle');
+  const code = +(g.match(/^\s*versionCode\s+(\d+)\s*$/m) || [])[1];
+  const name = (g.match(/^\s*versionName\s+"([^"]+)"\s*$/m) || [])[1];
+  assert.equal(code, L.versionCodeOf(ver, true), 'versionCode в build.gradle не стор-код версии ' + ver +
+    (code === L.versionCodeOf(ver, false) ? ' (там тест-код: после тест-сборки пересобери --store)' : ''));
+  assert.equal(name, ver, 'versionName в build.gradle');
+  assert.equal((rd('www/version.js').match(/window\.APP_VERSION = '([^']+)'/) || [])[1], ver, 'www/version.js');
+  assert.equal(JSON.parse(rd('www/files.json')).version, ver, 'www/files.json');
 });
 
 test('XML Android: в комментариях нет «--» (aapt2 валит mergeResources)', () => {

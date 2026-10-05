@@ -111,7 +111,9 @@ function renderCard() {
     if (!c) { closeCard(); return false; }
     var ymStr = UI.curYM();
     var fact = Engine.catFact(UI.S, cardOf.id, ymStr), lim = Engine.catLimit(UI.S, cardOf.id, ymStr), plan = Engine.planOr0(UI.S, cardOf.id, ymStr);
-    var left = plan - fact;
+    // остаток в копейках, как и порог заливки: 333,33+333,33+333,34 из 1000 - это ровно
+    // план (жёлтый, «осталось 0»), а не «-0,0000000001» красным
+    var left = (Math.round(plan * 100) - Math.round(fact * 100)) / 100;
     var L = UI.levelOf(cardOf.kind, fact, lim);
     var idx = catIndex(cardOf.kind, cardOf.id) % 6;
     var curIcon = c.icon || Icons.guessKind(c.name, cardOf.kind);
@@ -431,7 +433,14 @@ function editTx(id) {
   var body =
     '<div class="ef-err" id="etErr" hidden></div>' +
     '<div class="ef"><span class="lbl">Сумма, ₽</span>' +
-      '<input class="inp" id="etAmount" type="text" inputmode="decimal" value="' + esc(Engine.fmt(t.amount)) + '"></div>' +
+      '<input class="inp" id="etAmount" type="text" inputmode="decimal" autocomplete="off" value="' + esc(Engine.fmt(t.amount)) + '">' +
+      '<div class="calc-ops" id="etOps">' +
+        '<button class="chip" type="button" data-op="+" aria-label="Плюс">+</button>' +
+        '<button class="chip" type="button" data-op="−" aria-label="Минус">−</button>' +
+        '<button class="chip" type="button" data-op="×" aria-label="Умножить">×</button>' +
+        '<button class="chip" type="button" data-op="÷" aria-label="Разделить">÷</button>' +
+        '<button class="chip" type="button" data-op="=" aria-label="Посчитать">=</button>' +
+      '</div><div class="calc-res" id="etRes" hidden></div></div>' +
     '<div class="ef"><span class="lbl">Дата</span>' +
       '<input class="inp" id="etDate" type="date" max="' + esc(Engine.today()) + '" value="' + esc(t.date) + '"></div>';
 
@@ -465,7 +474,7 @@ function editTx(id) {
       { label: 'Повторить', cls: 'ghost', onClick: function () { repeatTx(id); } },
       { label: 'Сохранить', cls: 'primary', onClick: function () { return saveEditTx(id); } }
     ],
-    onOpen: function () { UI.moneyInput($('etAmount')); UI.noFutureDate($('etDate')); }
+    onOpen: function () { UI.calcInput($('etAmount'), $('etOps'), $('etRes')); UI.noFutureDate($('etDate')); }
   });
 }
 
@@ -494,7 +503,9 @@ function showEtErr(msg) {
 function saveEditTx(id) {
   var t = Engine.findTx(UI.S, id);
   if (!t) { UI.dlgAlert('Операция не найдена.'); return false; }
-  var v = Engine.parseNum($('etAmount').value);
+  var raw = $('etAmount').value;
+  var v = Engine.calcAmount(raw);          // «1 200» и «1 200+300» - одним разбором
+  if (Engine.hasCalcOp(raw) && !isFinite(v)) { showEtErr('Не получается посчитать сумму'); return false; }
   if (!(v > 0)) { showEtErr('Сумма должна быть больше нуля'); return false; }
   if (v > Engine.MAX_AMOUNT) { showEtErr('Максимум ' + Engine.fmt(Engine.MAX_AMOUNT) + ' ₽'); return false; }
   var wid = $('etWallet').value;

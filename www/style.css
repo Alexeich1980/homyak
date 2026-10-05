@@ -830,6 +830,11 @@ body[data-theme="light"] input[type="date"].inp {
 .mgrid-nav { width: 44px; min-height: 40px; font-size: 22px; font-weight: 700; padding: 0; }
 .ef { margin-bottom: 12px; }
 .ef:last-child { margin-bottom: 0; }
+/* калькулятор под полем суммы в правке операции: + − × ÷ = в ряд, итог строкой ниже */
+.calc-ops { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-top: 8px; }
+.calc-ops .chip { font-size: 18px; font-weight: 700; padding: 0; }
+.calc-res { margin-top: 6px; font-size: 14px; font-weight: 700; color: var(--text); }
+.calc-res.bad { color: var(--num-over); }
 .ef-err { color: var(--num-over); font-size: 13px; font-weight: 700; margin: -4px 0 12px; }
 /* «Скрыть» и «Удалить» в форме кошелька: две равные кнопки в строку, опасная - справа */
 .ef-acts { display: flex; gap: 8px; margin-top: 4px; }

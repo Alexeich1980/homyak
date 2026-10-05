@@ -477,6 +477,8 @@ UI.afterRender = function () {
 };
 
 UI.openSummary = open;
+// какой месяц писать в хранилище: подмена на время карточки живёт только в памяти
+UI.persistMonth = function () { return monthTaken ? monthSaved : UI.S.ui.month; };
 UI.closeSummary = close;
 // «назад» (Android/Escape): с экрана — к выбору, с выбора — закрыть аналитику
 UI.summaryBack = function () { if (view === 'chooser') close(); else toChooser(); };

@@ -14,7 +14,8 @@ android/local.properties
 keys/
 *.jks
 *.keystore
-tools/
+tools/*
+!tools/run-selftest.js
 .env
 .env.*
 

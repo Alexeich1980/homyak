@@ -586,34 +586,35 @@ add('отказ записи: save() возвращает false и вешает 
   eq(warn.hidden, true, 'полоса не убралась после успешной записи');
 });
 
-// (17г) выведенная категория: шапка и «Аналитика» об одних и тех же деньгах
-add('выведенная категория: шапка и аналитика сходятся', function () {
-  var S = UI.S;
-  if (!S.plans || !S.plans.exp.length) { ok(true, 'без планов проверять нечего'); return; }
-  var ymStr = UI.curYM();
-  var victim = S.plans.exp[S.plans.exp.length - 1];
-  var wasRetired = victim.retired;
+// (17г) архивная категория: шапка и «Аналитика» об одних и тех же деньгах.
+// Своя категория с тратой уходит в архив - её факт обязан остаться в разрезе месяца.
+add('архивная категория: шапка и аналитика сходятся', function () {
+  var S = UI.S, ymStr = UI.curYM();
   var w = S.wallets[0];
   ok(w, 'нет кошелька');
-  var tx = Engine.addTx(S, { kind: 'exp', amount: 7000, catId: victim.id, walletId: w.id,
-    date: ymStr < Engine.ym(Engine.today()) ? ymStr + '-10' : Engine.today() });
+  if (!w) return;
+  var wasCats = S.categories.exp.slice();
+  var victim = Engine.addCategory(S, 'exp', { name: 'Архив-тест' });
+  var tx = null;
   try {
-    victim.retired = true;                        // как будто категорию вывели на компе
+    tx = Engine.addTx(S, { kind: 'exp', amount: 7000, catId: victim.id, walletId: w.id,
+      date: ymStr < Engine.ym(Engine.today()) ? ymStr + '-10' : Engine.today() });
+    Engine.archiveCategory(S, victim.id, true);   // хозяин убрал категорию в архив
     UI.render();
     var spent = Engine.summary(S, ymStr).spent;
     var rows = Engine.monthBreakdown(S, ymStr, 'exp');
     var sum = 0;
     rows.forEach(function (r) { sum += r.fact; });
-    eq(sum, spent, 'сумма строк «Аналитики» разошлась с шапкой «Потрачено»');
+    eq(Math.round(sum), spent, 'сумма строк «Аналитики» разошлась с шапкой «Потрачено»');
     var row = null;
     rows.forEach(function (r) { if (r.catId === victim.id) row = r; });
-    ok(row && row.fact === 7000, 'факта выведенной категории нет в разрезе');
-    ok(row.retired === true, 'строка не помечена как выведенная');
+    ok(row && row.fact === 7000, 'факта архивной категории нет в разрезе');
+    ok(row && row.archived === true, 'строка не помечена как архивная');
     var tile = document.querySelector('#app .circle[data-id="' + victim.id + '"]');
-    ok(tile && tile.classList.contains('retired'), 'плитка выведенной категории не приглушена');
+    ok(tile && tile.classList.contains('retired'), 'плитка архивной категории не приглушена');
   } finally {
-    victim.retired = wasRetired;
-    Engine.deleteTx(S, tx.id);
+    if (tx) Engine.deleteTx(S, tx.id);
+    S.categories.exp = wasCats;
     UI.render();
   }
 });
@@ -1922,36 +1923,91 @@ add('операция: «Повторить» заполняет экран су
   }
 });
 
-// (19г) сто процентов - красный: проверяем не только движок, но и саму плитку
-add('заливка: ровно 100 % плана красит плитку красным', function () {
-  var S = UI.S;
-  if (!S.plans || !S.plans.exp.length) { ok(true, 'без планов проверять нечего'); return; }
-  var ymStr = UI.curYM(), m = Engine.monthIndex(S.plans, ymStr);
-  if (m < 0) { ok(true, 'месяц вне планов'); return; }
-  var cat = S.plans.exp[0], w = S.wallets[0];
-  ok(w, 'нет кошелька');
-  var wasPlan = S.plans.months[m].expPlan[cat.id];
+// (1.0.2) калькулятор в правке операции: проверяем то, что видно на экране, а не только
+// Engine.calcAmount - кнопки-знаки, строку итога, сворачивание по «=» и запись суммы.
+add('правка операции: калькулятор + − × ÷ = на экране и в сохранённой сумме', function () {
+  var src = UI.S.tx.filter(function (t) { return t.kind === 'exp'; })[0];
+  ok(src, 'нет операции-расхода');
+  if (!src) return;
+  var was = src.amount;
+  function $(id) { return document.getElementById(id); }
+  function op(k) { var b = $('etOps').querySelector('[data-op="' + k + '"]'); ok(b, 'нет кнопки ' + k); b.click(); }
+  function type(s) { var i = $('etAmount'); i.value += s; i.dispatchEvent(new Event('input', { bubbles: true })); }
+  UI.editTx(src.id);
+  try {
+    var inp = $('etAmount');
+    ok(inp && $('etOps') && $('etRes'), 'в окне операции нет поля с калькулятором');
+    inp.focus(); inp.value = '100';
+    try { inp.setSelectionRange(3, 3); } catch (e) {}
+    op('+'); type('50'); op('×'); type('2');
+    eq(inp.value, '100+50×2', 'знаки встали не на место');
+    ok(!$('etRes').hidden, 'строка итога спрятана при выражении');
+    eq($('etRes').textContent.replace(/[\s  ]/g, ''), '=200₽', 'итог: умножение раньше сложения');
+    op('×');                                       // второй знак подряд меняет первый
+    eq(inp.value, '100+50×2×', 'знак после числа');
+    op('÷');
+    eq(inp.value, '100+50×2÷', 'второй знак подряд не заменил первый');
+    inp.value = '1000−250'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    op('=');
+    eq(Engine.parseNum(inp.value), 750, '«=» не свернул выражение в сумму');
+    ok($('etRes').hidden, 'строка итога осталась после «=»');
+    inp.value = '5÷0'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    ok(/посчитать/.test($('etRes').textContent), 'деление на ноль не подсвечено');
+    inp.value = '1 990+10'; inp.dispatchEvent(new Event('input', { bubbles: true }));
+    var save = null;
+    [].forEach.call($('dlgBtns').querySelectorAll('button'), function (b) { if (b.textContent.trim() === 'Сохранить') save = b; });
+    ok(save, 'нет кнопки «Сохранить»');
+    save.click();
+    eq(Engine.findTx(UI.S, src.id).amount, 2000, 'сохранилась не посчитанная сумма');
+  } finally {
+    if (UI.dlgOpen && UI.dlgOpen()) UI.closeDlg();
+    Engine.updateTx(UI.S, src.id, { amount: was });
+    UI.save(); UI.render();
+  }
+});
+
+// Лимит категории на текущий месяц: запомнить как было и вернуть (для проверок заливки).
+// Раньше эти проверки брали планы с ПК, которых в автономном «Хомяке» нет, и
+// молча засчитывались без проверки. Теперь - те же лимиты, что задаёт хозяин.
+function limSnap(S, ymStr, catId) {
+  var m = S.limits[ymStr];
+  return (m && Object.prototype.hasOwnProperty.call(m, catId)) ? m[catId] : null;
+}
+
+// (19г) ровно сто процентов - жёлтый, копейка сверх - красный (решение 29.09.2026):
+// проверяем не только движок, но и саму плитку на экране
+add('заливка: ровно 100 % лимита - жёлтая плитка, сверх лимита - красная', function () {
+  var S = UI.S, ymStr = UI.curYM();
+  var cat = Engine.listCategories(S, 'exp', { ymStr: ymStr })[0], w = S.wallets[0];
+  ok(cat && w, 'нет категории расхода или кошелька');
+  if (!cat || !w) return;
+  var wasLim = limSnap(S, ymStr, cat.id);
   var fact = Engine.catFact(S, cat.id, ymStr);
   var added = [];
+  function ring() { return document.querySelector('#app .circle[data-kind="exp"][data-id="' + cat.id + '"] .ring'); }
   try {
-    // план ровно равен факту: 100 % - это уже перебор
-    S.plans.months[m].expPlan[cat.id] = fact > 0 ? fact : 1000;
     if (!(fact > 0)) {
       added.push(Engine.addTx(S, { kind: 'exp', amount: 1000, catId: cat.id, walletId: w.id, date: Engine.today() }));
+      fact = Engine.catFact(S, cat.id, ymStr);
     }
+    // лимит ровно равен факту: 100 % - впритык, жёлтый
+    Engine.setLimit(S, ymStr, cat.id, fact);
     UI.render();
-    eq(Engine.fill(Engine.catFact(S, cat.id, ymStr), Engine.catPlan(S, cat.id, ymStr)).level, 'over', 'движок');
-    eq(UI.levelOf('exp', 100, 100).lvl, 'over', 'levelOf на границе');
-    var ring = document.querySelector('#app .circle[data-id="' + cat.id + '"] .ring');
-    ok(ring, 'плитки категории нет на экране');
-    ok(ring.classList.contains('lvl-over'), 'плитка на 100 % не красная: ' + ring.className);
-    ok(!ring.classList.contains('lvl-warn'), 'плитка осталась жёлтой');
+    eq(Engine.fill(fact, Engine.catLimit(S, cat.id, ymStr)).level, 'warn', 'движок на 100 %');
+    eq(UI.levelOf('exp', 100, 100).lvl, 'warn', 'levelOf на границе');
+    ok(ring(), 'плитки категории нет на экране');
+    ok(ring().classList.contains('lvl-warn'), 'плитка на 100 % не жёлтая: ' + ring().className);
+    ok(!ring().classList.contains('lvl-over'), 'плитка на 100 % красная');
 
-    // чуть за сотню - тоже красный, а 99,9 % ещё жёлтый
-    eq(Engine.fill(1001, 1000).level, 'over', '1.001');
+    // лимит на копейку меньше факта - перерасход, красный
+    Engine.setLimit(S, ymStr, cat.id, Math.round((fact - 0.01) * 100) / 100);
+    UI.render();
+    ok(ring().classList.contains('lvl-over'), 'плитка сверх лимита не красная: ' + ring().className);
+
+    eq(Engine.fill(1000.01, 1000).level, 'over', 'копейка сверх');
     eq(Engine.fill(999, 1000).level, 'warn', '0.999');
   } finally {
-    S.plans.months[m].expPlan[cat.id] = wasPlan;
+    Engine.setLimit(S, ymStr, cat.id, wasLim);
     added.forEach(function (t) { Engine.deleteTx(S, t.id); });
     UI.render();
   }
@@ -2010,17 +2066,16 @@ add('звук: за планом каждый расход звучит пере
 
   var S = UI.S, w = S.wallets[0];
   ok(w, 'нет кошелька');
-  if (!S.plans || !S.plans.exp.length) { ok(true, 'без планов проверять нечего'); return; }
-  var ymStr = UI.curYM(), m = Engine.monthIndex(S.plans, ymStr);
-  if (m < 0) { ok(true, 'месяц вне планов'); return; }
-
-  var cat = S.plans.exp[0];
-  var wasPlan = S.plans.months[m].expPlan[cat.id];
+  var ymStr = UI.curYM();
+  var cat = Engine.listCategories(S, 'exp', { ymStr: ymStr })[0];
+  ok(cat, 'нет категории расхода');
+  if (!w || !cat) return;
+  var wasLim = limSnap(S, ymStr, cat.id);
   var heard = [], play0 = window.Sound.play;
   var added = [];
   try {
     window.Sound.play = function (n) { heard.push(n); return true; };
-    S.plans.months[m].expPlan[cat.id] = 100;                       // план заведомо мал
+    Engine.setLimit(S, ymStr, cat.id, 100);                        // лимит заведомо мал
     added.push(Engine.addTx(S, { kind: 'exp', amount: 500, catId: cat.id, walletId: w.id, date: Engine.today() }));
     UI.soundTx('exp', cat.id, ymStr);
     added.push(Engine.addTx(S, { kind: 'exp', amount: 500, catId: cat.id, walletId: w.id, date: Engine.today() }));
@@ -2030,7 +2085,7 @@ add('звук: за планом каждый расход звучит пере
     eq(heard.join(','), 'over,over,over', 'перебор звучал не каждый раз');
   } finally {
     window.Sound.play = play0;
-    S.plans.months[m].expPlan[cat.id] = wasPlan;
+    Engine.setLimit(S, ymStr, cat.id, wasLim);
     added.forEach(function (t) { Engine.deleteTx(S, t.id); });
     UI.render();
   }
@@ -2224,23 +2279,34 @@ add('кошельки: больше четырёх — точки страниц
   );
 });
 
+// Долив своих категорий расхода на две страницы (с лимитом 1000 на текущий месяц) и
+// возврат как было. Раньше долив шёл в планы с ПК, которых в автономном
+// «Хомяке» нет, и обе проверки страниц молча засчитывались.
+function padCats(S, n, name) {
+  var ymStr = UI.curYM();
+  var snap = { cats: S.categories.exp.slice(), order: (S.ui.order.exp || []).slice(),
+    lim: S.limits[ymStr] ? JSON.parse(JSON.stringify(S.limits[ymStr])) : null, ids: [] };
+  for (var i = 1; i <= n; i++) {
+    var c = Engine.addCategory(S, 'exp', { name: name + ' ' + i, icon: 'other' });
+    Engine.setLimit(S, ymStr, c.id, 1000);
+    snap.ids.push(c.id);
+  }
+  snap.restore = function () {
+    S.categories.exp = snap.cats;
+    S.ui.order.exp = snap.order;
+    if (snap.lim) S.limits[ymStr] = snap.lim; else delete S.limits[ymStr];
+    snap.ids.forEach(function (id) { delete S.icons[id]; });
+    UI.relayout();
+  };
+  return snap;
+}
+
 // (20е) перестановка на второй странице расходов не кидает на первую
 add('страницы: перестановка на второй странице оставляет вторую страницу', function () {
-  var S = UI.S;
-  if (!S.plans) { ok(true, 'план-модель ПК убрана в форке - синтетику на планах не гоняем'); return; }
-  var ymStr = UI.curYM(), m = Engine.monthIndex(S.plans, ymStr);
-  if (m < 0) { ok(true, 'месяц вне планов'); return; }
-  var mine = [];
+  var S = UI.S, ymStr = UI.curYM();
   var box = document.querySelector('#fieldExp .pages');
-  var wasOrder = (S.ui.order.exp || []).slice();
+  var pad = padCats(S, 12, 'Стр');
   try {
-    for (var i = 1; i <= 12; i++) {
-      var id = 'stpage' + i;
-      mine.push(id);
-      S.plans.exp.push({ id: id, name: 'Стр ' + i, retired: false, order: 900 + i });
-      S.plans.months.forEach(function (mo) { mo.expPlan[id] = 1000; });
-      S.icons[id] = 'other';
-    }
     UI.relayout();
     var pages = document.querySelectorAll('#fieldExp .page').length;
     ok(pages >= 2, 'страниц расходов меньше двух: ' + pages);
@@ -2249,7 +2315,7 @@ add('страницы: перестановка на второй страниц
     eq(Math.round(box.scrollLeft / box.clientWidth), 1, 'лента не встала на вторую страницу');
 
     var per = document.querySelectorAll('#fieldExp .page:first-child .circle').length;
-    var list = Engine.cats(S, 'exp', ymStr).map(function (c) { return c.id; });
+    var list = Engine.listCategories(S, 'exp').map(function (c) { return c.id; });
     ok(list.length > per + 1, 'на второй странице меньше двух плиток');
     var a = list[per], b = list[per + 1];
     list[per] = b; list[per + 1] = a;               // меняем местами две плитки ВТОРОЙ страницы
@@ -2257,7 +2323,7 @@ add('страницы: перестановка на второй страниц
     UI.render();
 
     eq(Math.round(box.scrollLeft / box.clientWidth), 1, 'после перестановки лента прыгнула на первую страницу');
-    var now = Engine.cats(S, 'exp', ymStr).map(function (c) { return c.id; });
+    var now = Engine.listCategories(S, 'exp', { ymStr: ymStr }).map(function (c) { return c.id; });
     eq(now[per], b, 'порядок не сохранился');
     eq(now[per + 1], a, 'порядок не сохранился');
 
@@ -2267,11 +2333,7 @@ add('страницы: перестановка на второй страниц
     UI.exitEdit();
     eq(Math.round(box.scrollLeft / box.clientWidth), 1, 'выход из правки сбросил страницу');
   } finally {
-    S.plans.exp = S.plans.exp.filter(function (c) { return mine.indexOf(c.id) < 0; });
-    S.plans.months.forEach(function (mo) { mine.forEach(function (id) { delete mo.expPlan[id]; }); });
-    mine.forEach(function (id) { delete S.icons[id]; });
-    S.ui.order.exp = wasOrder;
-    UI.relayout();
+    pad.restore();
   }
 });
 
@@ -2283,6 +2345,12 @@ add('правка: соседи переезжают плавно, призра�
   var a = circle('wallet', 0), b = circle('wallet', 1);
   ok(a && b, 'нужны два кошелька');
   var idA = a.dataset.id, idB = b.dataset.id;
+  // Прежняя проверка могла оставить ленту кошельков на второй странице (на экране
+  // телефона 5 кошельков + «+» = две страницы): тогда первые две плитки за левым краем
+  // (x < 0), жест уходит в пустоту и «сосед переставился без перехода». Возвращаем ленту
+  // на первую страницу - изоляция стенда, не приложение (разобрано 01.10.2026).
+  var wstrip = document.querySelector('#fieldWallets .strip');
+  if (wstrip) wstrip.scrollLeft = 0;
 
   return withoutPanel(function () {
     UI.enterEdit();
@@ -2384,17 +2452,12 @@ add('форма: у селекта свой шеврон с нормальным
 // Долив категорий делаем на две страницы, поднимаем кошелёк, у края поле листается само,
 // и цель на 2-й странице ловится elementFromPoint.
 add('перенос: призрак fixed и цель на другой странице расходов', function () {
-  var S = UI.S, mine = [];
-  if (!S.plans) { ok(true, 'план-модель ПК убрана в форке - синтетику на планах не гоняем'); return; }
+  var S = UI.S;
   var box = document.querySelector('#fieldExp .pages');
-  for (var i = 1; i <= 12; i++) {
-    var id = 'stfix' + i; mine.push(id);
-    S.plans.exp.push({ id: id, name: 'Пер ' + i, retired: false, order: 800 + i });
-    S.plans.months.forEach(function (mo) { mo.expPlan[id] = 1000; });
-    S.icons[id] = 'other';
-  }
+  var pad = padCats(S, 12, 'Пер');
   UI.relayout();
   var pages = document.querySelectorAll('#fieldExp .page').length;
+  if (pages < 2) pad.restore();
   ok(pages >= 2, 'страниц расходов меньше двух: ' + pages);
 
   var wal = circle('wallet', 0);
@@ -2402,7 +2465,7 @@ add('перенос: призрак fixed и цель на другой стра
   // угол внизу-справа наезжает на 2-ю страницу расходов и перехватывал бы elementFromPoint
   var pvis = panel ? panel.style.visibility : null;
   if (panel) panel.style.visibility = 'hidden';
-  function done() { if (panel) panel.style.visibility = pvis; }
+  function done() { if (panel) panel.style.visibility = pvis; box.scrollLeft = 0; pad.restore(); }
   var w = center(wal);
   var r = box.getBoundingClientRect();
   pev(wal, 'pointerdown', w.x, w.y, false, 'mouse');
@@ -2623,10 +2686,12 @@ add('кошельки: перестановка с первой страницы
       ok(tgt && tgt !== src, 'на второй странице нет цели для перестановки');
       var b = tgt.getBoundingClientRect();
       pev(document, 'pointermove', b.right - 4, b.top + b.height / 2, false);   // правая половина = «после»
-      // нарезка не поехала: страницы по-прежнему 4 + 2
+      // нарезка не поехала: страницы по-прежнему 4 + 2. Считаем только кошельки
+      // (.wcard[data-id]): плитка «+ кошелёк» тоже .wcard и стоит в конце второй страницы -
+      // из-за неё проверка ждала 2, а видела 3 (стенд, не приложение; разобрано 01.10.2026)
       var wp = document.querySelectorAll('#fieldWallets .wpage');
-      eq(wp[0].querySelectorAll('.wcard').length, 4, 'первая страница расползлась во время переноса');
-      eq(wp[1].querySelectorAll('.wcard').length, 2, 'вторая страница расползлась во время переноса');
+      eq(wp[0].querySelectorAll('.wcard[data-id]').length, 4, 'первая страница расползлась во время переноса');
+      eq(wp[1].querySelectorAll('.wcard[data-id]').length, 2, 'вторая страница расползлась во время переноса');
       pev(document, 'pointerup', b.right - 4, b.top + b.height / 2, true);
       return sleep(UI.SETTLE_MS + 220);
     }).then(function () {
@@ -2637,9 +2702,9 @@ add('кошельки: перестановка с первой страницы
       ok(after.indexOf(moved) >= 4, 'кошелёк не переехал на вторую страницу: ' + after.join(','));
       var wp = document.querySelectorAll('#fieldWallets .wpage');
       eq(wp.length, 2, 'страниц после перестановки не две');
-      eq(wp[0].querySelectorAll('.wcard').length, 4, 'после перестановки на первой странице не четыре');
-      eq(wp[1].querySelectorAll('.wcard').length, 2, 'после перестановки на второй странице не два');
-      var ids = [].map.call(document.querySelectorAll('#fieldWallets .wcard'), function (c) { return c.dataset.id; });
+      eq(wp[0].querySelectorAll('.wcard[data-id]').length, 4, 'после перестановки на первой странице не четыре');
+      eq(wp[1].querySelectorAll('.wcard[data-id]').length, 2, 'после перестановки на второй странице не два');
+      var ids = [].map.call(document.querySelectorAll('#fieldWallets .wcard[data-id]'), function (c) { return c.dataset.id; });
       eq(ids.join(','), after.join(','), 'порядок в ленте разошёлся с порядком в состоянии');
       done();
     }, function (e) {
@@ -2734,8 +2799,14 @@ add('лента: дни, строки и подвал совпадают с ра
       ok(g.change >= 0 || d.querySelector('.fd-ch').classList.contains('neg'), 'минус не покрашен красным');
       ok(g.change <= 0 || d.querySelector('.fd-ch').classList.contains('pos'), 'плюс не покрашен зелёным');
     }
-    // строка: кошелёк сверху, категория снизу, знак и цвет по виду операции
-    var row = document.querySelector('#smBody .txrow');
+    // строка: кошелёк сверху, категория снизу, знак и цвет по виду операции.
+    // Берём первую строку дохода/расхода: у перевода внизу маршрут «Карта → Накопления»,
+    // а не категория. Раньше брали просто первую строку, и 1-го числа (все операции демо
+    // в одном дне, порядок по ts в пределах миллисекунды) проверка то падала, то нет.
+    var row = [].filter.call(document.querySelectorAll('#smBody .txrow'), function (r) {
+      var t = Engine.findTx(S, r.dataset.id); return t && t.kind !== 'transfer';
+    })[0];
+    ok(row, 'в ленте нет строки дохода или расхода');
     var t0 = Engine.findTx(S, row.dataset.id);
     ok(row.querySelector('.fd-w') && row.querySelector('.fd-n'), 'в строке нет кошелька над категорией');
     eq(row.querySelector('.fd-n').textContent, UI.catName(t0.catId), 'категория в строке');
@@ -2934,7 +3005,12 @@ add('доходы: тап по заголовку сворачивает пол�
     eq(UI.S.ui.incomeCollapsed, true, 'состояние не записалось');
     ok(document.getElementById('fieldInc').classList.contains('collapsed'), 'поле не свернулось');
     eq(body.getBoundingClientRect().height, 0, 'плитки доходов остались на экране');
-    eq(document.getElementById('incDots').getBoundingClientRect().height, 0, 'точки доходов остались');
+    // Точки живут внутри #incBody: свёрнутое тело режет их своей рамкой (max-height 0 +
+    // overflow hidden), а собственный прямоугольник точек остаётся 10 px. Раньше мерили
+    // его и ловили ложное «точки остались» при двух страницах доходов (демо: 4 дохода +
+    // «+»). Меряем видимую часть - пересечение с телом (стенд, разобрано 01.10.2026).
+    var dr = document.getElementById('incDots').getBoundingClientRect(), br = body.getBoundingClientRect();
+    eq(Math.max(0, Math.min(dr.bottom, br.bottom) - Math.max(dr.top, br.top)), 0, 'точки доходов остались');
     eq(document.getElementById('incHeadText').textContent, text0, 'заголовок с суммой пропал');
     eq(head.getAttribute('aria-expanded'), 'false', 'aria-expanded свёрнутого поля');
     ok(!chevUp(), 'у свёрнутого поля галочка не смотрит вниз');
@@ -3208,6 +3284,42 @@ add('подсказки: в карточке кошелька очередь car
   } finally {
     UI.S.ui.hints = wasHints; UI.S.ui.hintsDismissed = JSON.parse(wasDis); UI.save(); UI.render();
   }
+});
+
+// (26) смена месяца, пока приложение открыто/в фоне (баг 01.10.2026, найден в личном
+// «Хомяке»): экран не рисовался заново после полуночи и показывал прошлый месяц.
+// Подменяем «сегодня» на 1-е число следующего месяца, зовём ту же проверку, что стоит на
+// возврате из фона, и смотрим экран. Заодно: лимиты не тронуты, free-гейт отвечает так же.
+add('новый месяц: после полуночи экран с нуля, прошлый - в истории, лимиты переехали, гейт на месте', function () {
+  var realToday = Engine.today, savedMonth = UI.S.ui.month;
+  var cur = Engine.ym(realToday()), y = +cur.slice(0, 4), m = +cur.slice(5, 7);
+  var next = (m === 12 ? (y + 1) + '-01' : y + '-' + (m < 9 ? '0' : '') + (m + 1));
+  function spent() { return Number(document.querySelector('#sumSpent .sv').textContent.replace(/[^\d-]/g, '')) || 0; }
+  function gate() {
+    return JSON.stringify({ l: UI.S.limits[cur], w: Engine.canAddWallet(UI.S, false), e: Engine.canAddExpCat(UI.S, false), i: Engine.canAddIncCat(UI.S, false) });
+  }
+  UI.S.ui.month = null; UI.render();
+  var before = spent(), gateBefore = gate(), hadNext = !!UI.S.limits[next], hadMark = !!UI.S.limitsCarried[next];
+  ok(before > 0, 'в демо текущего месяца нет факта');
+  try {
+    Engine.today = function () { return next + '-01'; };
+    ok(UI.checkDay(), 'проверка дня не перерисовала экран');
+    eq(UI.curYM(), next, 'месяц экрана после полуночи');
+    eq(spent(), 0, '«Потрачено» в новом месяце');
+    ok(document.getElementById('sums').getAttribute('aria-label').indexOf(UI.monthLabel(next)) >= 0, 'шапка не подписана новым месяцем');
+    ok(!document.querySelector('#app .circle[data-kind="exp"] .ring:not([data-pct="0"])'), 'кольца расходов не пустые');
+    eq(gate(), gateBefore, 'лимиты или free-гейт изменились от смены месяца');
+    // лимиты прошлого месяца сами переезжают в новый (решение 01.10.2026)
+    if (!hadNext && UI.S.limits[cur]) ok(UI.S.limits[next] && Object.keys(UI.S.limits[next]).length, 'лимиты не переехали в новый месяц');
+    UI.S.ui.month = cur; UI.render();
+    eq(spent(), before, 'прошлый месяц в истории со старыми суммами');
+  } finally {
+    Engine.today = realToday;
+    if (!hadNext) delete UI.S.limits[next];
+    if (!hadMark) delete UI.S.limitsCarried[next];
+    UI.S.ui.month = savedMonth; UI.render(); UI.save();
+  }
+  eq(UI.curYM(), savedMonth || cur, 'месяц вернулся');
 });
 
 // (25г) светлая тема: плитки меню отделены от фона — либо своим фоном, либо гранью/тенью

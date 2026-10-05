@@ -96,8 +96,12 @@ function keepBroken(raw) {
 // save() честно возвращает false, вешает несъезжающую красную полосу и один раз
 // показывает окно — чтобы хозяин успел сделать бэкап в файл.
 function save() {
+  // сводка на время карточки подменяет S.ui.month в памяти; в хранилище пишем настоящий
+  // (иначе вылет приложения с открытой карточкой оставлял экран на чужом месяце навсегда)
+  var mem = S.ui.month, keep = (window.UI && window.UI.persistMonth) ? window.UI.persistMonth() : mem;
   try {
-    localStorage.setItem(KEY, JSON.stringify(S));
+    S.ui.month = keep;
+    try { localStorage.setItem(KEY, JSON.stringify(S)); } finally { S.ui.month = mem; }
     if (saveBroken) { saveBroken = false; saveBanner(false); }
     return true;
   } catch (e) {
@@ -127,7 +131,18 @@ function pad2(n) { return Engine.pad2(n); }
 // как есть, с копейками, если они есть.
 function fmt(n) { return Engine.fmt(Math.round(Number(n) || 0)); }
 function money(v) { return Engine.fmt(v); }
-function curYM() { return S.ui.month || Engine.ym(Engine.today()); }
+// «Сегодня» главного экрана. Раньше текущий месяц считался только в момент рендера, а
+// рендер зовут действия хозяина: приложение на телефоне живёт в памяти сутками, и после
+// полуночи 1-го числа экран продолжал показывать прошлый месяц (баг 01.10.2026, найден
+// в личном «Хомяке»). Теперь день экрана пересчитывает сам render() и проверка дня на
+// возврате из фона / раз в 20 секунд (checkDay ниже). Пока открыто окно (карточка,
+// сводка, сумма, диалог, меню, режим правки) или тащат плитку - день не двигаем: месяц
+// у окна в руках не меняется, экран догонит после закрытия. Лимиты нового месяца
+// render() один раз берёт из прошлого (Engine.carryLimits, решение 01.10.2026), если
+// своих нет. Free-гейт от смены месяца не зависит: он считает кошельки и категории.
+var screenDay = Engine.today();
+function screenYM() { return Engine.ym(screenDay); }
+function curYM() { return S.ui.month || screenYM(); }
 function esc(s) {
   return String(s).replace(/[&<>"]/g, function (c) {
     return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
@@ -322,7 +337,7 @@ function renderTop() {
 function renderTopMonth() {
   var el = $('topMonth');
   if (!el) return;
-  var cur = curYM(), other = cur !== Engine.ym(Engine.today());
+  var cur = curYM(), other = cur !== screenYM();
   if (!other) { el.innerHTML = ''; return; }
   el.innerHTML = '<span class="tm-l">' + esc(monthLabel(cur)) + '</span>' +
     '<button class="tm-back" type="button">к текущему</button>';
@@ -932,7 +947,30 @@ var firstRender = true;   // первую отрисовку не анимиру
 // после подмены застаёт цифры на полпути. Такую перерисовку делаем мгновенной.
 var instantOnce = false;
 
+function dayBusy() {
+  if (drag || incAnim) return true;
+  try { return !!topOverlay(); } catch (e) { return false; }
+}
+// Наступил новый день, пока приложение открыто или лежало в фоне: перерисовать экран.
+// Смена месяца = «Потрачено», кольца, «Осталось» и доходы с нуля; прошлый месяц
+// остаётся в выборе месяца (операции не трогаем - они привязаны к своей дате).
+function checkDay() {
+  var now = Engine.today();
+  if (now === screenDay || dayBusy()) return false;
+  renderInstant();          // одометры с прошлого месяца не крутим - это другой месяц
+  return true;
+}
+
 function render() {
+  if (!dayBusy()) {
+    var newDay = Engine.today();
+    // сменился месяц посреди обычной перерисовки (палец успел раньше проверки дня):
+    // одометры с прошлого месяца не крутим и не выдаём разницу за эффект операции
+    if (Engine.ym(newDay) !== Engine.ym(screenDay)) instantOnce = true;
+    screenDay = newDay;
+  }
+  // новый месяц получает лимиты прошлого, если своих нет (один раз, см. Engine.carryLimits)
+  if (Engine.carryLimits(S, screenYM())) save();
   var prev = (firstRender || instantOnce) ? null : snapVals();
   instantOnce = false;
   document.body.dataset.theme = S.ui.theme;
@@ -1070,6 +1108,65 @@ function moneyInput(el) {
     if (String(el.value).trim() === '') { el.value = Engine.fmt(0); return; }
     var n = Engine.parseNum(el.value);
     if (isFinite(n)) el.value = Engine.fmt(n);
+  });
+}
+
+// Поле суммы с калькулятором (правка операции): под полем ряд кнопок + − × ÷ =,
+// потому что на цифровой клавиатуре Android этих знаков нет. Пока в поле выражение,
+// под кнопками виден итог «= 450 ₽»; по «=» и при уходе из поля выражение сворачивается
+// в сумму. Кнопки не отнимают фокус (pointerdown без действия по умолчанию), иначе
+// клавиатура прыгала бы на каждом знаке. Считает Engine.calcAmount.
+var CALC_OPS = '+−×÷';
+function calcInput(el, ops, res) {
+  if (!el || el.dataset.calc) return;
+  el.dataset.calc = '1';
+  function paint() {
+    if (!res) return;
+    if (!Engine.hasCalcOp(el.value)) { res.hidden = true; return; }
+    var v = Engine.calcAmount(el.value);
+    res.textContent = isFinite(v) ? '= ' + Engine.fmt(v) + ' ₽' : 'Не получается посчитать';
+    res.classList.toggle('bad', !isFinite(v));
+    res.hidden = false;
+  }
+  function collapse() {
+    if (String(el.value).trim() === '') { el.value = Engine.fmt(0); paint(); return; }
+    var v = Engine.calcAmount(el.value);
+    if (isFinite(v)) el.value = Engine.fmt(v);
+    paint();
+  }
+  // ноль по тапу уходит сам, но только голый ноль: «0+» после нажатия знака не стираем
+  el.addEventListener('focus', function () {
+    if (!Engine.hasCalcOp(el.value) && Engine.calcAmount(el.value) === 0) el.value = '';
+  });
+  el.addEventListener('input', paint);
+  // уход фокуса на кнопку-знак - не уход из поля: иначе «100+50», нажали «×» -
+  // выражение свернулось бы в «150×» и порядок действий поменялся
+  el.addEventListener('blur', function (e) {
+    if (ops && e.relatedTarget && ops.contains(e.relatedTarget)) return;
+    collapse();
+  });
+  if (!ops) return;
+  // и сами кнопки не забирают фокус: pointerdown на части WebView фокус всё равно
+  // переносит, надёжно держит только mousedown
+  ['pointerdown', 'mousedown'].forEach(function (ev) {
+    ops.addEventListener(ev, function (e) { if (e.target.closest('[data-op]')) e.preventDefault(); });
+  });
+  ops.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-op]');
+    if (!b) return;
+    var k = b.dataset.op;
+    if (k === '=') { collapse(); return; }
+    var v = String(el.value);
+    var at = document.activeElement === el && el.selectionStart != null ? el.selectionStart : v.length;
+    var to = document.activeElement === el && el.selectionEnd != null ? el.selectionEnd : v.length;
+    var head = v.slice(0, at);
+    if (!head.trim()) return;                                   // знак без числа перед ним - мимо
+    if (CALC_OPS.indexOf(head.slice(-1)) >= 0 || /[+\-*/]$/.test(head)) head = head.slice(0, -1);   // второй знак подряд меняет первый
+    el.value = head + k + v.slice(to);
+    el.focus();
+    try { el.setSelectionRange(head.length + 1, head.length + 1); } catch (x) {}
+    haptic('light');
+    paint();
   });
 }
 
@@ -1646,17 +1743,10 @@ function shiftDate(dateStr, days) {
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
 }
 
-// безопасный разбор выражения: только цифры, точка и + − × ÷
-function evalExpr(e) {
-  var s = String(e || '').replace(/,/g, '.').replace(/×/g, '*').replace(/÷/g, '/').replace(/−/g, '-');
-  s = s.replace(/[+\-*/]+$/, '');
-  if (!s) return NaN;
-  if (!/^[\d.+\-*/\s]+$/.test(s)) return NaN;
-  var v;
-  try { v = new Function('return (' + s + ')')(); } catch (x) { return NaN; }
-  if (typeof v !== 'number' || !isFinite(v)) return NaN;
-  return Math.round(v * 100) / 100;
-}
+// Разбор выражения экрана суммы - тем же калькулятором, что и поле суммы в правке
+// операции (Engine.calcAmount): одно и то же «150+300» считается одинаково везде, и
+// без eval (раньше тут был new Function).
+function evalExpr(e) { return Engine.calcAmount(e); }
 
 function lastIsOp(e) { return e.length > 0 && OPS.indexOf(e.charAt(e.length - 1)) >= 0; }
 function tailNum(e) {
@@ -2334,7 +2424,7 @@ if (REEL) (function () {
 window.UI = {
   get S() { return S; },
   set S(v) { S = v; },
-  save: save, render: render, renderInstant: renderInstant, renderMenu: renderMenu, curYM: curYM, fmt: fmt, esc: esc, MONTHS: MONTHS,
+  save: save, render: render, renderInstant: renderInstant, renderMenu: renderMenu, curYM: curYM, screenYM: screenYM, checkDay: checkDay, fmt: fmt, esc: esc, MONTHS: MONTHS,
   openDlg: openDlg, dlgConfirm: dlgConfirm, dlgAlert: dlgAlert, dlgPrompt: dlgPrompt,
   closeDlg: closeDlg, dlgOpen: dlgOpen, bindBackdropClose: bindBackdropClose, bindSwipeClose: bindSwipeClose,
   overlayFlags: overlayFlags, topOverlay: topOverlay, closeTop: closeTop,
@@ -2342,7 +2432,7 @@ window.UI = {
   openMenu: openMenu, closeMenu: closeMenu, makeGhost: makeGhost,
   openAmount: openAmount, closeAmount: closeAmount, amountOpen: amountOpen, resolveDrop: resolveDrop, evalExpr: evalExpr, SNAP_MS: SNAP_MS,
   tileHtml: tileHtml, walletHtml: walletHtml, walletTileHtml: walletTileHtml, applyFill: applyFill, levelOf: levelOf, wcolor: wcolor,
-  monthLabel: monthLabel, money: money, moneyInput: moneyInput,
+  monthLabel: monthLabel, money: money, moneyInput: moneyInput, calcInput: calcInput,
   noFutureDate: noFutureDate, clampDate: clampDate, FUTURE_MSG: FUTURE_MSG,
   catName: catName, walletName: walletName,
   loadFrom: loadFrom, saveBanner: saveBanner,
@@ -2379,6 +2469,30 @@ $('obDone').addEventListener('click', function () {
 
 if (DEMO || REEL) save();
 render();
+
+// Возврат в приложение и полночь, пока оно открыто. Любой из путей может не сработать
+// на конкретной оболочке (WebView не всегда шлёт visibilitychange при resume), поэтому
+// их несколько, а проверка дешёвая - сравнение двух строк.
+(function () {
+  function safeCheck() { try { checkDay(); } catch (e) {} }
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState !== 'hidden') safeCheck(); });
+  window.addEventListener('focus', safeCheck);
+  window.addEventListener('pageshow', safeCheck);
+  try {
+    var N = window.NativePlugins;
+    if (window.isNativeApp && window.isNativeApp() && N && N.App && N.App.addListener) {
+      // результат не ждём: на устройстве addListener может вернуть не-Promise
+      N.App.addListener('resume', safeCheck);
+      N.App.addListener('appStateChange', function (st) { if (!st || st.isActive) safeCheck(); });
+    }
+  } catch (e) {}
+  (function tick() {
+    setTimeout(function () {
+      if (document.visibilityState !== 'hidden') safeCheck();
+      tick();
+    }, 20000);
+  })();
+})();
 
 // Приложение нарисовалось и не упало по дороге — это и есть «сборка живая».
 // По этой отметке update.js подтверждает бесшовное обновление, а boot.js решает,

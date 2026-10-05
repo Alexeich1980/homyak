@@ -73,6 +73,36 @@
     return isFinite(n) ? n : NaN;
   }
 
+  // Сумма с калькулятором (поле суммы в правке операции): «1 200+300», «150×3», «900÷2».
+  // Знаки: + и - (в т.ч. «−»), × * и ÷ /; умножение и деление раньше сложения.
+  // Разбираем сами, без eval. Висящий знак в конце отбрасываем (палец не дотыкал
+  // число). Всё прочее, деление на ноль и два знака подряд - NaN. Итог - до копеек.
+  function calcAmount(v) {
+    var s = String(v == null ? '' : v).replace(/\s/g, '').replace(/,/g, '.')
+      .replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/').replace(/[+\-*/]+$/, '');
+    if (!s || !/^[\d.+\-*/]+$/.test(s)) return NaN;
+    var toks = s.match(/\d+(\.\d*)?|\.\d+|[+\-*/]/g);
+    if (!toks || toks.join('') !== s) return NaN;              // «1.2.3» и подобное
+    var i = 0, sign = 1;
+    if (toks[0] === '+' || toks[0] === '-') { sign = toks[0] === '-' ? -1 : 1; i = 1; }
+    function num() {
+      var t = toks[i++];
+      if (t === undefined || /[+\-*/]/.test(t)) return NaN;
+      return parseFloat(t);
+    }
+    var total = 0, term = sign * num();
+    while (i < toks.length) {
+      var op = toks[i++], n = num();
+      if (op === '*') term *= n;
+      else if (op === '/') term = n === 0 ? NaN : term / n;
+      else { total += term; term = op === '-' ? -n : n; }
+    }
+    var r = total + term;
+    return isFinite(r) ? Math.round(r * 100) / 100 : NaN;
+  }
+  // есть ли в строке суммы действие (минус в самом начале - не действие)
+  function hasCalcOp(v) { return /.[+\-−*/×÷]/.test(String(v == null ? '' : v).replace(/\s/g, '')); }
+
   // настоящая ли календарная дата «ГГГГ-ММ-ДД» (2026-13-45 и 2026-02-30 — нет)
   function isDate(v) {
     if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) return false;
@@ -102,6 +132,7 @@
       // Месячные лимиты (планы), заданные вручную: { 'ГГГГ-ММ': { catId: сумма } }.
       // НЕТ ключа = лимит не задан (кружок серый), ключ со значением 0 = явный ноль (красный при факте).
       limits: {},
+      limitsCarried: {},          // 'ГГГГ-ММ' → true: месяц уже получил лимиты из прошлого (carryLimits)
       tx: [],
       icons: {},                  // catId → iconName (иконка категории)
       ui: { incomeCollapsed: false, theme: 'dark', haptics: true, sound: true,
@@ -139,6 +170,7 @@
       wallets: Array.isArray(S.wallets) ? S.wallets.filter(isObj) : [],
       categories: normCategories(S.categories),
       limits: normLimits(S.limits),
+      limitsCarried: normCarried(S.limitsCarried),
       tx: Array.isArray(S.tx) ? S.tx.filter(isObj) : [],
       icons: normIcons(S.icons),
       ui: isObj(S.ui) ? S.ui : d.ui
@@ -226,6 +258,12 @@
   function normCategories(c) {
     if (!isObj(c)) return { exp: [], inc: [] };
     return { exp: normCatList(c.exp), inc: normCatList(c.inc) };
+  }
+  function normCarried(c) {
+    var out = {};
+    if (!isObj(c)) return out;
+    Object.keys(c).forEach(function (k) { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(k) && c[k] === true) out[k] = true; });
+    return out;
   }
   function normLimits(l) {
     var out = {};
@@ -494,6 +532,37 @@
     });
     return cnt;
   }
+  // Лимиты сами переезжают в новый месяц (решение Алексея 01.10.2026): 1-го числа хозяин
+  // не должен видеть «Лимиты нет», будто настройки пропали. Если у месяца ymStr своих
+  // лимитов нет и он ещё ни разу не заполнялся, копируем лимиты и планы доходов из
+  // ближайшего прошлого месяца, где они есть (архивные категории не везём). Заполненный
+  // месяц помечается в S.limitsCarried - и тот, что заполнили отсюда, и тот, у которого
+  // уже были свои лимиты (заданные руками, «Скопировать планы», версия до 1.0.2, бэкап):
+  // если хозяин потом сам уберёт все лимиты месяца, они не вернутся назад. Прошлые
+  // месяцы не трогаем, зовётся только для текущего.
+  // Возвращает число скопированных лимитов (0 - ничего не делали).
+  function carryLimits(S, ymStr) {
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(ymStr)) return 0;
+    if (S.limits[ymStr] && Object.keys(S.limits[ymStr]).length) {
+      S.limitsCarried[ymStr] = true;           // свои лимиты есть - месяц уже заполнен
+      return 0;
+    }
+    if (S.limitsCarried[ymStr]) return 0;
+    var from = Object.keys(S.limits).filter(function (k) {
+      return k < ymStr && Object.keys(S.limits[k]).length;
+    }).sort().pop();
+    if (!from) return 0;
+    var dst = {}, n = 0;
+    Object.keys(S.limits[from]).forEach(function (cid) {
+      var f = findCategory(S, cid);
+      if (!f || f.cat.archived) return;
+      dst[cid] = S.limits[from][cid]; n++;
+    });
+    if (!n) return 0;
+    S.limits[ymStr] = dst;
+    S.limitsCarried[ymStr] = true;
+    return n;
+  }
   // В суммах плана null трактуется как 0 (категория без лимита плана не добавляет).
   function planOr0(S, catId, ymStr) { var v = catLimit(S, catId, ymStr); return isNum(v) ? v : 0; }
 
@@ -579,24 +648,23 @@
     return Math.max(1, Math.min(o.max || 4, n));
   }
 
-  // Порог перебора - ровно сто процентов: план, выбранный до копейки, уже красный.
-  // Уровень считаем по СЫРОМУ отношению, а не по округлённому до трёх знаков: 10 001
-  // из 10 000 округлялось в 1.000, сравнение «строго больше единицы» его не ловило,
-  // и заметный перерасход хозяин видел жёлтым.
-  //   0            - none
-  //   0 < r < 0.8  - ok
-  //   0.8 <= r < 1 - warn
-  //   r >= 1       - over (сюда же план 0 при живом факте)
-  // ratio отдаём СЫРЫМ, без округления: округление до трёх знаков делало из 99 999 из
-  // 100 000 ровную единицу, кольцо рисовалось полным, а цвет оставался жёлтым - «сто
-  // процентов, но не красное». Округляет тот, кто печатает проценты текстом, а не тот,
-  // кто рисует заливку.
+  // Порог перебора - СТРОГО больше плана (решение Алексея 29.09.2026): потратил ровно
+  // план - это «впритык», жёлтый, а не перерасход. Сравниваем суммы в копейках, а не
+  // долю: 333.33 + 333.33 + 333.34 в плавающей точке дают 1000.0000000000001, и ровный
+  // план покраснел бы; а копейка сверх плана - уже честный красный.
+  //   0                          - none
+  //   0 < r < 0.8                - ok
+  //   0.8 <= r и факт <= плана   - warn
+  //   факт > плана               - over (сюда же план 0 при живом факте)
+  // ratio отдаём СЫРЫМ, без округления. Округляет тот, кто печатает проценты текстом,
+  // а не тот, кто рисует заливку.
   function fill(fact, plan) {
     if (plan === null || plan === undefined) return { ratio: 0, level: 'none' }; // лимит не задан — серый
     if (!fact || fact <= 0) return { ratio: 0, level: 'none' };
     if (plan <= 0) return { ratio: 1, level: 'over' };                            // явный 0 при факте — красный
     var raw = fact / plan;
-    return { ratio: raw, level: raw >= 1 ? 'over' : (raw >= 0.8 ? 'warn' : 'ok') };
+    if (Math.round(fact * 100) > Math.round(plan * 100)) return { ratio: raw, level: 'over' };
+    return { ratio: raw, level: raw >= 0.8 ? 'warn' : 'ok' };
   }
   // Заливка кружка ИСТОЧНИКА ДОХОДА по месячному ПЛАНУ. Зеркало fill() для расхода, но
   // семантика позитивная: перевыполнение плана - это хорошо, поэтому НИКОГДА не 'over'
@@ -692,7 +760,7 @@
   }
 
   // ---------- зона внимания: где перерасход ----------
-  // Категории расхода, у которых факт достиг плана (over) или подобрался к нему (warn,
+  // Категории расхода, у которых факт перевалил за план (over) или подобрался к нему (warn,
   // ≥80%). Сортировка: сперва перебравшие — по сумме перерасхода вниз, за ними
   // подобравшиеся — по доле вниз. over — сколько сверх плана (для плана 0 это весь факт).
   // Работает и для прошлых месяцев: catFact берёт факт из истории. Чистая функция.
@@ -995,7 +1063,7 @@
     txSound: txSound,
     WALLET_COLORS: WALLET_COLORS, WALLET_COLOR_DEFAULT: WALLET_COLOR_DEFAULT, walletColor: walletColor,
     today: today, ym: ym, pad2: pad2, isDate: isDate, futureDate: futureDate,
-    fmt: fmt, fmtCompact: fmtCompact, fmtTyped: fmtTyped, parseNum: parseNum, NBSP: NBSP, plural: plural,
+    fmt: fmt, fmtCompact: fmtCompact, fmtTyped: fmtTyped, parseNum: parseNum, calcAmount: calcAmount, hasCalcOp: hasCalcOp, NBSP: NBSP, plural: plural,
     RING_MIN: RING_MIN, RING_MAX: RING_MAX, RING_STEP: RING_STEP,
     ringSize: ringSize, ringGeom: ringGeom, ringFit: ringFit, ringRows: ringRows,
     addWallet: addWallet, findWallet: findWallet, updateWallet: updateWallet, setWalletBase: setWalletBase, walletBalance: walletBalance,
@@ -1005,7 +1073,7 @@
     archiveCategory: archiveCategory, listCategories: listCategories,
     reorderCategories: function (S, kind, ids) { return reorder(S, kind, ids); },
     catKind: catKind, catFact: catFact, fill: fill, fillInc: fillInc, txOfCat: txOfCat,
-    catLimit: catLimit, setLimit: setLimit, copyLimits: copyLimits, planOr0: planOr0,
+    catLimit: catLimit, setLimit: setLimit, copyLimits: copyLimits, carryLimits: carryLimits, planOr0: planOr0,
     FREE: FREE, walletsActiveCount: walletsActiveCount, expCatsActiveCount: expCatsActiveCount,
     canAddWallet: canAddWallet, canAddExpCat: canAddExpCat, canAddIncCat: canAddIncCat,
     HARD: HARD, incCatsActiveCount: incCatsActiveCount,

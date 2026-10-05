@@ -1007,7 +1007,8 @@ function openWallets() {
 // Год листается стрелками: 1 января декабрь прошлого года иначе было бы не открыть.
 // Открываем на годе выбранного месяца, а не календарном - чтобы видеть, где стоишь.
 function pickMonth(year) {
-  var cur = UI.curYM(), now = Engine.ym(Engine.today());
+  UI.checkDay();            // сразу после полуночи «сейчас» в выборе - уже новый месяц
+  var cur = UI.curYM(), now = UI.screenYM();
   if (!year) year = parseInt(cur.slice(0, 4), 10);
   var body = '<div class="mgrid-y">' +
       '<button type="button" class="chip mgrid-nav" id="pmPrev" aria-label="Предыдущий год">‹</button>' +
@@ -1026,7 +1027,7 @@ function pickMonth(year) {
       all($('dlgBody'), '.chip[data-ym]').forEach(function (el) {
         el.addEventListener('click', function () {
           var v = el.getAttribute('data-ym');
-          UI.S.ui.month = (v === Engine.ym(Engine.today())) ? null : v;
+          UI.S.ui.month = (v === UI.screenYM()) ? null : v;
           UI.save(); UI.closeDlg(); UI.render(); UI.haptic('light');
         });
       });

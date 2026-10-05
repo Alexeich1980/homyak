@@ -19,8 +19,8 @@ android {
         applicationId "ru.dorokhin.homyak"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20003
-        versionName "1.0.1"
+        versionCode 20005
+        versionName "1.0.2"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Стор-сборка (build-apk.js --store передаёт -PhomyakStore=true): MainActivity на старте
         // забывает путь к скачанной веб-сборке - код меняется только через RuStore.

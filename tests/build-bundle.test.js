@@ -22,7 +22,8 @@ test('files.json в www/ описывает то, что реально едет
   assert.ok(Array.isArray(j.files) && j.files.length > 10, 'список пустой');
   assert.equal(j.version, require('../package.json').version, 'версия описи разошлась с package.json');
 
-  // всё перечисленное существует (звуки есть в APK, но в публичный репозиторий не выложены)
+  // всё перечисленное существует
+  // звуки есть в APK, но в публичный репозиторий не выложены
   j.files.filter(f => !/^sounds\/.+\.(mp3|ogg)$/.test(f))
     .forEach(f => assert.ok(fs.existsSync(path.join(WWW, f)), 'нет файла из описи: ' + f));
 

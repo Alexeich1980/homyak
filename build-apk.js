@@ -51,6 +51,7 @@ const MODE = L.buildMode(process.env, process.argv.slice(2));
 const on = (v) => !!v && v !== '0' && v !== 'false' && v !== '';
 const REEL = process.argv.slice(2).indexOf('--reel') >= 0 || on(process.env.HOMYAK_REEL);
 try { L.checkModeConflict(MODE, REEL); } catch (e) { die(e.message); }
+try { L.checkDistribution(MODE); } catch (e) { die(e.message); }
 
 // --- console_app_id RuStore: одно значение в двух местах -------------------------------
 const PAY_CONFIG = path.join(ROOT, 'www', 'pay-config.js');
@@ -124,6 +125,20 @@ function run(cmd, args, opts) {
   if (r.error) return { ok: false, why: r.error.message };
   if (r.status !== 0) return { ok: false, why: 'код возврата ' + r.status };
   return { ok: true };
+}
+
+// --- 0. гейт: самопроверка www/selftest.js -----------------------------------
+// Self-test живёт в браузере и раньше гонялся руками: сборка 1.0.1 прошла с красным
+// пунктом (19г) - его никто не запустил (найдено 01.10.2026). Теперь любой режим сборки
+// сначала гоняет self-test в headless Edge (экран телефона 375x812) и падает при любом
+// FAIL - ДО версии, cap sync и Gradle. Обхода нет намеренно.
+say('[0/3] Самопроверка (self-test в headless Edge)...');
+{
+  const gate = spawnSync(process.execPath, [path.join(ROOT, 'tools', 'run-selftest.js')], { cwd: ROOT, stdio: 'inherit' });
+  if (gate.error || gate.status !== 0) {
+    die('self-test красный (' + (gate.error ? gate.error.message : 'код ' + gate.status) + ') - сборка остановлена до Gradle.\n' +
+        'Посмотреть руками: node serve.js и http://localhost:8793/?demo&selftest (окно телефона 375x812).');
+  }
 }
 
 // --- 1. окружение -----------------------------------------------------------
@@ -413,10 +428,23 @@ if (REEL) {
 } else if (MODE.release) {
   if (CANDIDATE) candidateBanner();
   say('\nДальше: ' + (MODE.store
-    ? 'этот APK/AAB - в RuStore; напрямую клиентам отдавай --release, не стор.'
+    ? 'APK со стола - в Консоль RuStore. Прямой раздачи нет: только через RuStore.'
     : 'перешли файл клиенту, открыть на телефоне, «Установить».'));
-  say('Выложить обновление на канал: python publish-update.py (читает out/store/)');
+  say('После одобрения и публикации в RuStore: python publish-update.py <версия> (только номер версии на канал)');
 } else {
   console.warn('\n=== ТЕСТ-СБОРКА: демо-данные + полный доступ. НЕ отдавать клиентам и не публиковать ===');
   say('publish-update.py папку out/test/ не видит - опубликовать её случайно нельзя.');
+}
+
+// --- уборка out/: последние 3 версии APK/zip, остальное - прочь ---------------------
+// Только здесь, в самом конце успешной сборки: при любой осечке выше die() уже вышел.
+// Алиасы без версии, манифесты и всё, на что они ссылаются (published.json = опубликованное
+// на канале), не трогаются (build-lib.js).
+try {
+  const gone = L.pruneOldVersions(OUT_DIR, 3);
+  say('Уборка ' + path.relative(ROOT, OUT_DIR).split(path.sep).join('/') + '/: ' + (gone.length ? 'удалены старые версии - ' + gone.join(', ') : 'старше последних 3 версий ничего нет'));
+} catch (e) {
+  // e.removed - что уборка успела удалить до осечки: «пропущена» при удалённых файлах врёт
+  console.warn('  ! уборка старых версий ' + (e.removed && e.removed.length
+    ? 'прервана, уже удалены: ' + e.removed.join(', ') + '. Причина: ' : 'пропущена, ничего не удалено: ') + e.message);
 }
