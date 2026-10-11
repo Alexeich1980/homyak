@@ -75,7 +75,7 @@ function txRowHtml(t, ctx) {
         '<div class="txn">' + esc(name || '—') + '</div>' +
         '<div class="txmeta">' + esc(txDate(t.date)) + '</div>' +
       '</div>' +
-      '<div class="txa ' + cls + '">' + amt + ' ₽</div>' +
+      '<div class="txa ' + cls + '">' + amt + '\u00a0₽</div>' +
     '</div>' +
   '</div>';
 }
@@ -93,7 +93,7 @@ function renderCard() {
     $('cardTitle').textContent = w.name;
     var bal = Engine.walletBalance(UI.S, cardOf.id);
     var amt = $('cardAmt');
-    amt.textContent = money(bal) + ' ₽';
+    amt.textContent = money(bal) + '\u00a0₽';
     amt.classList.toggle('neg', bal < 0);
     // «Скрыть» уехало внутрь формы кошелька (там же, где «Удалить»), а на его месте
     // «Настроить» - та же форма, что открывается из списка «Настроить кошельки».
@@ -120,25 +120,26 @@ function renderCard() {
     ico.className = 'sh-ico cat t' + idx + ' lvl-' + L.lvl;
     ico.innerHTML = Icons.img(curIcon, cardOf.kind, 30, c.name);
     $('cardTitle').textContent = c.name;
-    $('cardAmt').textContent = money(fact) + ' ₽';
+    $('cardAmt').textContent = money(fact) + '\u00a0₽';
     $('cardAmt').classList.remove('neg');
     // Иконку источника дохода и категории меняем прямо здесь: до 0.2.2 это жило только
     // в режиме правки (долгий тап), и хозяин его не находил.
     var isInc = cardOf.kind === 'inc';
-    // Статус-строка. Расход: «лимит X · осталось Y» (Y<0 красным - перерасход).
-    // Доход: «план X · осталось до плана Y» / «перевыполнен на Z» (позитив, без красного).
+    // Статус-строка. Расход: «осталось Y» (Y<0 красным - перерасход). Доход: «осталось до
+    // плана Y» / «перевыполнен на Z» (позитив, без красного). Сам лимит/план здесь не
+    // повторяем (1.0.3, одно число - одно место): он стоит строкой ниже, рядом с «Изменить».
     var statusHtml;
     if (lim == null) statusHtml = isInc ? 'Плана на месяц нет' : 'Лимита на месяц нет';
-    else if (isInc) statusHtml = 'план <b>' + fmt(plan) + ' ₽</b> · ' + (
-      left > 0 ? 'осталось до плана <b>' + fmt(left) + ' ₽</b>'
-      : left < 0 ? 'перевыполнен на <b>' + fmt(-left) + ' ₽</b>'
-      : '<b>план выполнен</b>');
-    else statusHtml = 'лимит <b>' + fmt(plan) + ' ₽</b> · осталось <b class="' + (left < 0 ? 'txa neg' : '') + '">' + fmt(left) + ' ₽</b>';
+    else if (isInc) statusHtml =
+      left > 0 ? 'осталось до плана <b>' + fmt(left) + '\u00a0₽</b>'
+      : left < 0 ? 'перевыполнен на <b>' + fmt(-left) + '\u00a0₽</b>'
+      : '<b>план выполнен</b>';
+    else statusHtml = 'осталось <b class="' + (left < 0 ? 'txa neg' : '') + '">' + fmt(left) + '\u00a0₽</b>';
     $('cardActs').innerHTML = '<div class="sh-plan">' + statusHtml + '</div>' +
       // Число-цель правится прямо тут - отдельной строкой-действием. У расхода это «Лимит»,
       // у источника дохода - «План». Переименование и архив остаются в полном редакторе.
       '<div class="sh-icorow sh-limrow"><span class="sh-icol">' + (isInc ? 'План на месяц' : 'Лимит на месяц') + '</span>' +
-        '<span class="sh-limval" id="cardLimVal">' + (lim != null ? fmt(lim) + ' ₽' : 'не задан') + '</span>' +
+        '<span class="sh-limval" id="cardLimVal">' + (lim != null ? fmt(lim) + '\u00a0₽' : 'не задан') + '</span>' +
         '<button class="btn ghost icchg" type="button" id="cardLimBtn">' + (lim != null ? 'Изменить' : 'Задать') + '</button>' +
       '</div>' +
       '<div class="sh-icorow"><span class="sh-icol">Иконка</span>' +
@@ -165,7 +166,7 @@ function renderCard() {
   var swipeShown = UI.hintShouldShow('cardSwipe') && list.length > 0;
   if (hintEl) {
     var ht = hintEl.querySelector('.sh-ht');
-    if (ht) ht.textContent = 'Потяни строку влево - удалить, вправо - править.';
+    if (ht) ht.textContent = 'Потяните строку влево - удалить, вправо - править.';
     hintEl.hidden = !swipeShown;
   }
   // Ситуативная подсказка кошелька про «Изменить баланс»: на одном листе одновременно
@@ -230,7 +231,7 @@ function openTransfer(fromId) {
   $('trFrom').textContent = 'из «' + from.name + '»';
   $('trGrid').innerHTML = list.length
     ? list.map(function (w) { return UI.walletTileHtml(w); }).join('')
-    : '<div class="empty">Других кошельков нет - заведи второй в меню</div>';
+    : '<div class="empty">Других кошельков нет - заведите второй в меню</div>';
   $('trBg').hidden = false;
   $('trSheet').hidden = false;
   UI.haptic('light');
@@ -397,7 +398,7 @@ function txSummary(t) {
   var who = t.kind === 'transfer'
     ? UI.walletName(t.walletId) + ' → ' + UI.walletName(t.toWalletId)
     : UI.catName(t.catId) + ' · ' + UI.walletName(t.walletId);
-  return sign + money(t.amount) + ' ₽ · ' + who + ' · ' + txDate(t.date);
+  return sign + money(t.amount) + '\u00a0₽ · ' + who + ' · ' + txDate(t.date);
 }
 
 function confirmDelTx(id) {
@@ -470,7 +471,7 @@ function editTx(id) {
   UI.openDlg({
     title: 'Операция', body: body,
     buttons: [
-      { label: 'Отмена', cls: 'ghost' },
+      { label: 'Отмена', cls: 'nav' },
       { label: 'Повторить', cls: 'ghost', onClick: function () { repeatTx(id); } },
       { label: 'Сохранить', cls: 'primary', onClick: function () { return saveEditTx(id); } }
     ],
@@ -507,11 +508,11 @@ function saveEditTx(id) {
   var v = Engine.calcAmount(raw);          // «1 200» и «1 200+300» - одним разбором
   if (Engine.hasCalcOp(raw) && !isFinite(v)) { showEtErr('Не получается посчитать сумму'); return false; }
   if (!(v > 0)) { showEtErr('Сумма должна быть больше нуля'); return false; }
-  if (v > Engine.MAX_AMOUNT) { showEtErr('Максимум ' + Engine.fmt(Engine.MAX_AMOUNT) + ' ₽'); return false; }
+  if (v > Engine.MAX_AMOUNT) { showEtErr('Максимум ' + Engine.fmt(Engine.MAX_AMOUNT) + '\u00a0₽'); return false; }
   var wid = $('etWallet').value;
-  if (!wid) { showEtErr('Выбери кошелёк'); return false; }
+  if (!wid) { showEtErr('Выберите кошелёк'); return false; }
   var dt = $('etDate').value || t.date;
-  if (!Engine.isDate(dt)) { showEtErr('Проверь дату'); return false; }
+  if (!Engine.isDate(dt)) { showEtErr('Проверьте дату'); return false; }
   if (Engine.futureDate(dt)) { showEtErr(UI.FUTURE_MSG); return false; }
   var patch = {
     amount: v,
@@ -520,16 +521,16 @@ function saveEditTx(id) {
   };
   if ($('etCat')) patch.catId = $('etCat').value;
   if ($('etTo')) {
-    if ($('etTo').value === patch.walletId) { showEtErr('Выбери разные кошельки.'); return false; }
+    if ($('etTo').value === patch.walletId) { showEtErr('Выберите разные кошельки.'); return false; }
     patch.toWalletId = $('etTo').value;
   }
   try {
     Engine.updateTx(UI.S, id, patch);
   } catch (e) {
     var m = e && e.message;
-    showEtErr(m === 'amount-max' ? 'Максимум ' + Engine.fmt(Engine.MAX_AMOUNT) + ' ₽'
+    showEtErr(m === 'amount-max' ? 'Максимум ' + Engine.fmt(Engine.MAX_AMOUNT) + '\u00a0₽'
       : m === 'date-future' ? UI.FUTURE_MSG
-      : m === 'date' ? 'Проверь дату'
+      : m === 'date' ? 'Проверьте дату'
       : 'Сумма должна быть больше нуля');
     return false;
   }

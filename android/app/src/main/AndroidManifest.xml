@@ -64,6 +64,16 @@
         </provider>
     </application>
 
+    <!-- Android 11+: без этого приложение не «видит» установленный RuStore (проверка обновления,
+         переход в карточку магазина - RuStoreUpdatePlugin.java, 1.0.3). Разрешением не является. -->
+    <queries>
+        <package android:name="ru.vk.store" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="rustore" />
+        </intent>
+    </queries>
+
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />

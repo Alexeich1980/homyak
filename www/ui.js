@@ -24,36 +24,54 @@ var MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'М�
 // выполнилось бы позже и молча стёрло результат.
 var recovered = false;   // упали на состояние по умолчанию из-за порчи хранилища
 var saveBroken = false;  // запись в хранилище не проходит
+// 1.0.3 (защита от тихого затирания, как в «Карте года»): данные есть, но не прочитались,
+// а целой копии в карантине нет - в этой сессии НЕ пишем, иначе первое же сохранение
+// затёрло бы оригинал пресетом. loadProblem - что сказать хозяину на живом экране.
+var readOnly = false;
+var loadProblem = null;  // {kind:'broken', key, copied} | {kind:'unreadable'}
 
 var S = load();
-// Порченое хранилище: состояние по умолчанию записываем СРАЗУ, иначе битый текст лежал
-// бы под ключом и дальше, и «Данные повреждены» всплывало бы при каждом запуске
-// (сам битый текст уже отложен в KEY + '.broken').
-if (recovered) save();
+// Карантин не копим вечно: копии старше 30 дней удаляем при запуске, самую свежую
+// оставляем всегда (Engine.pruneQuarantine). Хранилище не открылось - не трогаем.
+if (!(loadProblem && loadProblem.kind === 'unreadable')) {
+  try { Engine.pruneQuarantine(localStorage, KEY, Date.now(), 30); } catch (e) {}
+}
+// Битое уже лежит в карантине (копия проверена чтением) - пишем состояние по умолчанию
+// сразу, иначе битый текст остался бы под ключом и окно всплывало бы на каждом запуске.
+// Копии нет / хранилище не открылось - НЕ пишем (readOnly).
+if (recovered && !readOnly) save();
 if (DEMO || REEL) {   // demo/reel детерминированы параметрами адреса, чтобы кадры повторялись
   S.ui.theme = Q.indexOf('light') >= 0 ? 'light' : 'dark';
   S.ui.incomeCollapsed = Q.indexOf('collapsed') >= 0;
 }
 
 // ---------- состояние ----------
-// Порченое хранилище раньше валило запуск целиком: window.UI не создавался, на экране
-// оставался скелет, меню и восстановление из файла были недоступны — на телефоне это
-// лечилось только переустановкой, то есть потерей всех данных. Теперь любой сбой разбора
-// откатывает на пустое состояние, а битый текст откладывается в KEY + '.broken' —
-// оттуда его ещё можно вытащить руками.
+// Порченое хранилище раньше валило запуск целиком; потом (до 1.0.3) откатывалось на пустое
+// состояние и СРАЗУ записывало его поверх, а битый текст клало в один ключ .broken без
+// проверки - не легла копия (нет места) или была вторая порча, и оригинал терялся молча.
+// Теперь (Engine.classifyStored/quarantine): битое уезжает в карантин со своим ключом и
+// проверкой чтением; копия не легла или хранилище не открылось - запись запрещена до
+// конца сессии (оригинал цел), экран честно об этом говорит. Восстановление из файла
+// снимает запрет (это осознанная замена всех данных).
 function load() {
-  var raw = null, fromOld = false;
-  try { raw = localStorage.getItem(KEY); } catch (e) {}
+  var raw = null, readErr = null, fromOld = false;
+  try { raw = localStorage.getItem(KEY); } catch (e) { readErr = e || new Error('getItem'); }
   // Миграция со старого рабочего имени: если под новым ключом пусто, а под прежним
   // (kazna_v1/kazna-demo) данные есть - берём их. Под новый ключ копируем ТОЛЬКО после
-  // удачного разбора: битый старый текст иначе переезжал бы под новый ключ и валил бы
-  // каждый следующий запуск в «Данные повреждены».
-  if (!raw) {
+  // удачного разбора: битый старый текст иначе переезжал бы под новый ключ.
+  if (!readErr && !raw) {
     var old = null;
     try { old = localStorage.getItem(KEY_OLD); } catch (e) {}
     if (old) { raw = old; fromOld = true; }
   }
+  if (readErr) {
+    readOnly = true; recovered = true; loadProblem = { kind: 'unreadable' };
+    return Engine.migrate(initialSeed());
+  }
   var s = loadFrom(raw);
+  // где лежит оригинал битого текста: при миграции - под прежним именем (kazna_v1), а под
+  // KEY пусто. Окно «Данные не прочитались» сохраняет в файл именно его (ревью 1.0.3).
+  if (loadProblem && loadProblem.kind === 'broken') loadProblem.src = fromOld ? KEY_OLD : KEY;
   if (fromOld && !recovered) { try { localStorage.setItem(KEY, raw); } catch (e) {} }
   return s;
 }
@@ -61,21 +79,13 @@ function load() {
 // вынесено из load() отдельной чистой ступенью: так путь восстановления можно
 // прогнать в self-test прямо на телефоне, не подкладывая мусор в боевой ключ
 function loadFrom(raw) {
-  if (!raw) return Engine.migrate(initialSeed());
-
-  var parsed = null, bad = false;
-  try { parsed = JSON.parse(raw); } catch (e) { bad = true; }
-  if (!bad && (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))) bad = true;
-
-  var s = null;
-  if (!bad) {
-    try { s = Engine.migrate(parsed); } catch (e) { bad = true; }
-    if (!s || !Array.isArray(s.tx) || !Array.isArray(s.wallets)) bad = true;
-  }
-  if (!bad) return s;
-
-  keepBroken(raw);
+  var r = Engine.classifyStored(raw, null);
+  if (r.kind === 'ok') return r.state;
+  if (r.kind === 'empty') return Engine.migrate(initialSeed());
+  var q = keepBroken(raw);
   recovered = true;
+  loadProblem = { kind: 'broken', key: q.key, copied: q.copied };
+  if (!q.copied) readOnly = true;   // копии нет - оригинал не трогаем
   return Engine.migrate(initialSeed());
 }
 
@@ -88,27 +98,37 @@ function initialSeed() {
 }
 
 function keepBroken(raw) {
-  try { localStorage.setItem(KEY + '.broken', String(raw).slice(0, 4 * 1024 * 1024)); } catch (e) {}
+  return Engine.quarantine(localStorage, KEY, String(raw).slice(0, 4 * 1024 * 1024));
 }
+
+// Снять запрет записи: хозяин осознанно заменяет все данные (восстановление из файла).
+// Полоса «Изменения сейчас не сохраняются» уходит сразу (раньше висела и после
+// восстановления - ревью 1.0.3); не легла и эта запись - save() повесит свою полосу.
+function allowWrite() { readOnly = false; restored = true; if (!saveBroken) saveBanner(false); }
+// данные восстановлены из файла - сессия снова с настоящими данными (для копии и напоминания)
+var restored = false;
 
 // Отказ записи раньше глотался молча: экран показывал правду, в хранилище оставалось
 // старое, и всё внесённое исчезало при следующем запуске без единого слова. Теперь
 // save() честно возвращает false, вешает несъезжающую красную полосу и один раз
 // показывает окно — чтобы хозяин успел сделать бэкап в файл.
 function save() {
+  // данные не прочитались и целой копии нет - не пишем, оригинал цел (см. load)
+  if (readOnly) { saveBanner(true); return false; }
   // сводка на время карточки подменяет S.ui.month в памяти; в хранилище пишем настоящий
   // (иначе вылет приложения с открытой карточкой оставлял экран на чужом месяце навсегда)
   var mem = S.ui.month, keep = (window.UI && window.UI.persistMonth) ? window.UI.persistMonth() : mem;
   try {
     S.ui.month = keep;
     try { localStorage.setItem(KEY, JSON.stringify(S)); } finally { S.ui.month = mem; }
-    if (saveBroken) { saveBroken = false; saveBanner(false); }
+    // удачная запись снимает любую полосу: и «не удалось сохранить», и «только чтение»
+    saveBroken = false; saveBanner(false);
     return true;
   } catch (e) {
     var first = !saveBroken;
     saveBroken = true;
     saveBanner(true);
-    if (first) dlgAlert('Телефон не даёт сохранить данные - в памяти нет места или хранилище закрыто. Сделай бэкап в файл, пока приложение открыто.', 'Не удалось сохранить');
+    if (first) dlgAlert('Телефон не даёт сохранить данные - в памяти нет места или хранилище закрыто. Сохраните копию в файл, пока приложение открыто: меню → «Копия данных» → «Сохранить копию в файл».', 'Не удалось сохранить');
     return false;
   }
 }
@@ -117,7 +137,9 @@ function saveBanner(on) {
   var el = $('saveWarn');
   if (!el) return;
   el.hidden = !on;
-  if (on) el.textContent = 'Не удалось сохранить данные - сделай бэкап в файл';
+  if (on) el.textContent = readOnly
+    ? 'Изменения сейчас не сохраняются - сохранённые данные не прочитались'
+    : 'Не удалось сохранить данные - сохраните копию в файл (меню → «Копия данных»)';
 }
 
 // ---------- утилиты ----------
@@ -229,8 +251,8 @@ function tileHtml(kind, id, name, icon, fact, plan, idx, retired) {
       '<span class="ico">' + tileIco(icon, kind, name) + '</span>' +
     '</div>' +
     '<div class="cname">' + esc(name) + '</div>' +
-    '<div class="cnum lvl-' + L.lvl + '">' + fmt(fact) + ' ₽</div>' +
-    '<div class="cplan">' + (plan == null ? '—' : fmt(plan) + ' ₽') + '</div>' +
+    '<div class="cnum lvl-' + L.lvl + '">' + fmt(fact) + '\u00a0₽</div>' +
+    '<div class="cplan">' + (plan == null ? '—' : fmt(plan) + '\u00a0₽') + '</div>' +
     EDIT_BADGE +
   '</div>';
 }
@@ -242,7 +264,7 @@ function walletHtml(w, bal) {
   return '<div class="circle wcard ' + wcolor(w) + '" data-kind="wallet" data-id="' + esc(w.id) + '">' +
     '<span class="ico">' + Icons.svg(Icons.walletKey(w.icon), 22) + '</span>' +
     '<div class="cname">' + esc(w.name) + '</div>' +
-    '<div class="cbal">' + fmt(bal) + ' ₽</div>' +
+    '<div class="cbal">' + fmt(bal) + '\u00a0₽</div>' +
     EDIT_BADGE +
   '</div>';
 }
@@ -256,7 +278,7 @@ function walletTileHtml(w, o) {
     '" data-id="' + esc(w.id) + '">' +
     '<span class="ico">' + Icons.svg(Icons.walletKey(w.icon), 22) + '</span>' +
     '<span class="wt-n">' + esc(w.name) + '</span>' +
-    '<span class="wt-b">' + fmt(Engine.walletBalance(S, w.id)) + ' ₽</span>' +
+    '<span class="wt-b">' + fmt(Engine.walletBalance(S, w.id)) + '\u00a0₽</span>' +
   '</button>';
 }
 
@@ -477,7 +499,7 @@ function renderInc() {
   // «из N ₽» только когда план дохода задан хоть у одного источника: «из 0 ₽» на чистом
   // старте читается как ошибка
   var incPlanned = Engine.limitedCount(S, ymStr, 'inc') > 0;
-  $('incHeadText').textContent = 'Доходы · ' + fmt(fact) + (incPlanned ? ' из ' + fmt(plan) : '') + ' ₽';
+  $('incHeadText').textContent = 'Доходы · ' + fmt(fact) + (incPlanned ? ' из ' + fmt(plan) : '') + '\u00a0₽';
   var col = !!S.ui.incomeCollapsed;
   $('incHead').setAttribute('aria-expanded', col ? 'false' : 'true');
   $('incHead').setAttribute('aria-label',
@@ -766,9 +788,11 @@ function renderExp() {
     fact += Engine.catFact(S, c.id, ymStr);
     plan += Engine.planOr0(S, c.id, ymStr);
   });
-  // без единого лимита - просто «Расходы · 500 ₽», без «из 0 ₽»
+  // 1.0.3 (одно число - одно место, как «Пенсия» №112): факт расходов уже стоит в шапке
+  // («Потрачено»), здесь его не повторяем - только сумма лимитов. Без единого лимита -
+  // просто «Расходы».
   var limited = Engine.limitedCount(S, ymStr, 'exp') > 0;
-  $('expHead').textContent = 'Расходы · ' + fmt(fact) + (limited ? ' из ' + fmt(plan) : '') + ' ₽';
+  $('expHead').textContent = limited ? 'Расходы · лимит ' + fmt(plan) + '\u00a0₽' : 'Расходы';
 }
 
 // ---------- длинные суммы в узких местах ----------
@@ -870,20 +894,9 @@ function renderMenu() {
   sw.innerHTML = dark ? MOON_SVG : SUN_SVG;
   sw.setAttribute('data-theme-ic', dark ? 'moon' : 'sun');
 
-  var hap = S.ui.haptics !== false;
-  $('mHapticInfo').textContent = hap ? 'вкл' : 'выкл';
-  $('mHapticSw').className = 'mi-sw' + (hap ? ' on' : '');
-  $('mHaptic').setAttribute('aria-pressed', hap ? 'true' : 'false');
-
-  var snd = S.ui.sound !== false;
-  $('mSoundInfo').textContent = snd ? 'вкл' : 'выкл';
-  $('mSoundSw').className = 'mi-sw' + (snd ? ' on' : '');
-  $('mSound').setAttribute('aria-pressed', snd ? 'true' : 'false');
-
-  var hnt = S.ui.hints !== false;
-  $('mHintsInfo').textContent = hnt ? 'вкл' : 'выкл';
-  $('mHintsSw').className = 'mi-sw' + (hnt ? ' on' : '');
-  $('mHints').setAttribute('aria-pressed', hnt ? 'true' : 'false');
+  // «Звук и подсказки»: подпись - короткое состояние трёх тумблеров (влезает в плитку на 320)
+  $('mPrefsInfo').textContent = prefsInfo();
+  paintPrefs();
 
   var nw = S.wallets.filter(function (w) { return !w.hidden; }).length;
   $('mWalletsInfo').textContent = nw + ' ' + Engine.plural(nw, 'кошелёк', 'кошелька', 'кошельков');
@@ -904,6 +917,11 @@ function renderMenu() {
   }
   var db = $('demoBar');
   if (db) db.hidden = !(S.ui && S.ui.demo);
+
+  // 1.0.3: «Защита входа» (lock.js); тумблер напоминания о копии - в подменю «Копия данных»
+  var li = $('mLockInfo');
+  if (li) li.textContent = (window.AppLock && window.AppLock.menuInfo) ? window.AppLock.menuInfo() : 'выкл';
+  paintCopy();
 }
 
 // ---------- снимок отображаемых чисел (для анимаций) ----------
@@ -1059,7 +1077,7 @@ function dlgConfirm(o) {
     title: o.title || '',
     body: o.text ? esc(o.text) : '',
     buttons: [
-      { label: o.cancelLabel || 'Отмена', cls: 'ghost' },
+      { label: o.cancelLabel || 'Отмена', cls: 'nav' },
       { label: o.okLabel || 'Да', cls: o.danger ? 'danger' : 'primary', onClick: function () { if (o.onOk) o.onOk(); } }
     ]
   });
@@ -1078,7 +1096,7 @@ function dlgPrompt(o) {
     title: o.title || '',
     body: body,
     buttons: [
-      { label: 'Отмена', cls: 'ghost' },
+      { label: 'Отмена', cls: 'nav' },
       { label: o.okLabel || 'Сохранить', cls: 'primary', onClick: function () {
         var v = $('dlgInput').value;
         return o.onOk ? o.onOk(v) : undefined;
@@ -1124,7 +1142,7 @@ function calcInput(el, ops, res) {
     if (!res) return;
     if (!Engine.hasCalcOp(el.value)) { res.hidden = true; return; }
     var v = Engine.calcAmount(el.value);
-    res.textContent = isFinite(v) ? '= ' + Engine.fmt(v) + ' ₽' : 'Не получается посчитать';
+    res.textContent = isFinite(v) ? '= ' + Engine.fmt(v) + '\u00a0₽' : 'Не получается посчитать';
     res.classList.toggle('bad', !isFinite(v));
     res.hidden = false;
   }
@@ -1353,7 +1371,7 @@ var MAIN_HINT_DEFAULT = (function () {
   return t ? t.textContent : '';
 })();
 var MAIN_HINTS = {
-  balance: 'Сначала укажи, сколько у тебя сейчас в кошельке: тап по кошельку → «Изменить баланс».',
+  balance: 'Сначала укажите, сколько у вас сейчас в кошельке: тап по кошельку → «Изменить баланс».',
   fill: 'Кружок - траты к лимиту: зелёный - в норме, оранжевый - близко к лимиту, красный - лимит превышен, серый - лимита нет.',
   taps: 'Тап по плитке - её операции и детали. Долгий тап - изменить порядок и иконку.'
 };
@@ -1382,11 +1400,14 @@ function mainHintKey() {
 function updateMainHint() {
   // «+» видно только на чистом главном экране: любой открытый поверх слой (лист суммы,
   // карточка, меню, аналитика, онбординг, окно) его прячет. Режим правки гасит CSS.
+  // Карточка «Сохрани копию» (nudges.js) стоит внизу на месте «плюса» и подсказки:
+  // пока она видна, их прячем.
+  var rm = $('remind'), remindOn = !!rm && !rm.hidden;
   var fab = $('fabAdd');
-  if (fab) fab.hidden = !!topOverlay();
+  if (fab) fab.hidden = !!topOverlay() || remindOn;
   var el = $('mainHint');
   if (!el) return;
-  var key = mainHintKey();
+  var key = remindOn ? null : mainHintKey();
   if (key) { var t = el.querySelector('.mh-t'); if (t) t.textContent = mainHintText(key); }
   el.setAttribute('data-hint', key || '');
   el.hidden = !key;
@@ -1713,8 +1734,8 @@ var amExpr = '';
 var amDate = null;
 var OPS = '+−×÷';
 var AM_MAX = 18;                       // длина выражения (в нём бывают знаки, не только цифры)
-var AM_TOP = Engine.MAX_AMOUNT;        // предел самой суммы: 999 999 999 ₽
-var AM_TOP_MSG = 'Слишком большая сумма. Максимум ' + Engine.fmt(AM_TOP) + ' ₽.';
+var AM_TOP = Engine.MAX_AMOUNT;        // предел самой суммы: 999 999 999 рублей
+var AM_TOP_MSG = 'Слишком большая сумма. Максимум ' + Engine.fmt(AM_TOP) + '\u00a0₽.';
 
 function catName(id) {
   var f = Engine.findCategory(S, id);
@@ -1901,9 +1922,9 @@ function amPickWallet(field) {
     .sort(function (a, b) { return a.order - b.order; });
   var body = list.length
     ? '<div class="wgrid">' + list.map(function (w) { return walletTileHtml(w); }).join('') + '</div>'
-    : '<div class="empty">Кошельков нет - заведи в меню «Настроить кошельки»</div>';
+    : '<div class="empty">Кошельков нет - заведите в меню «Настроить кошельки»</div>';
   openDlg({
-    title: 'Выбери кошелёк', body: body, buttons: [{ label: 'Отмена', cls: 'ghost' }],
+    title: 'Выберите кошелёк', body: body, buttons: [{ label: 'Отмена', cls: 'nav' }],
     // Слушатель вешаем на СВЕЖУЮ сетку, а не на общий #dlgBody: тот переживает окна,
     // и его обработчики копились бы, перекрёстно срабатывая (тап по категории задевал
     // бы старый обработчик кошелька). Сетка пересоздаётся каждым openDlg - утечки нет.
@@ -1929,10 +1950,10 @@ function amPickCat(field, kind) {
   var list = Engine.listCategories(S, kind, { ymStr: curYM() });
   var body = list.length
     ? '<div class="wgrid">' + list.map(function (c, i) { return catPickTileHtml(c, i, kind); }).join('') + '</div>'
-    : '<div class="empty">' + (kind === 'inc' ? 'Источников дохода нет' : 'Категорий нет') + ' - заведи в меню «Настроить категории»</div>';
+    : '<div class="empty">' + (kind === 'inc' ? 'Источников дохода нет' : 'Категорий нет') + ' - заведите в меню «Настроить категории»</div>';
   openDlg({
-    title: kind === 'inc' ? 'Выбери источник дохода' : 'Выбери категорию',
-    body: body, buttons: [{ label: 'Отмена', cls: 'ghost' }],
+    title: kind === 'inc' ? 'Выберите источник дохода' : 'Выберите категорию',
+    body: body, buttons: [{ label: 'Отмена', cls: 'nav' }],
     onOpen: function () {
       var grid = $('dlgBody').querySelector('.wgrid');
       if (!grid) return;
@@ -1955,7 +1976,7 @@ function openAdd() {
       '<button type="button" class="btn ghost" data-add-op="inc">Доход</button>' +
       '<button type="button" class="btn ghost" data-add-op="transfer">Перевод</button>' +
       '</div>',
-    buttons: [{ label: 'Отмена', cls: 'ghost' }],
+    buttons: [{ label: 'Отмена', cls: 'nav' }],
     onOpen: function () {
       var box = $('dlgBody').querySelector('.op-pick');
       if (!box) return;
@@ -2022,6 +2043,8 @@ function amSave() {
     action: 'Отменить',
     onAction: function () { Engine.deleteTx(S, tx.id); save(); render(); }
   });
+  // окно оценки RuStore: один раз, сразу после удачной записи (решение - guards.js)
+  if (window.Nudges && window.Nudges.afterTx) { try { window.Nudges.afterTx(); } catch (e) {} }
 }
 
 $('amCancel').addEventListener('click', closeAmount);
@@ -2135,24 +2158,114 @@ $('mTheme').addEventListener('click', function () {
   if (window.UI.closeCard) window.UI.closeCard();
   save(); render();
 });
-$('mHaptic').addEventListener('click', function () {
+// ---------- подменю «Звук и подсказки» и «Копия данных» (1.0.3, решение Алексея 05.10) ----------
+// Меню сокращено до 8 плиток: три выключателя и три пункта копии переехали в подменю.
+// Подменю - то же окно #dlg, что у «Защиты входа» и «О приложении», но меню под ним НЕ
+// закрываем: «Закрыть», «назад» или тап по фону возвращают в меню, подпись плитки уже новая.
+var PREFS = [
+  { id: 'snSound', key: 'sound', t: 'Звук', s: 'при записи операции', c: 'c-pink',
+    ic: '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z"/><path d="M15.6 9.6a3.4 3.4 0 0 1 0 4.8"/><path d="M18.2 7a7 7 0 0 1 0 10"/>' },
+  { id: 'snHaptic', key: 'haptics', t: 'Вибрация', s: 'отклик на касания', c: 'c-coral',
+    ic: '<rect x="8.5" y="3" width="7" height="18" rx="2.2"/><path d="M10.8 6h2.4"/><path d="M5 9.5v5M19 9.5v5"/><path d="M2.2 11v2M21.8 11v2"/>' },
+  { id: 'snHints', key: 'hints', t: 'Подсказки', s: 'хомяк объясняет экраны', c: 'c-teal',
+    ic: '<path d="M9.5 18h5"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1-.9 1.7v.5h-5.4v-.5c0-.7-.3-1.2-.9-1.7A6 6 0 0 1 12 3z"/>' }
+];
+var REMIND_IC = '<path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 1.5H5z"/><path d="M10 20.5h4"/>';
+function prefOn(key) { return S.ui[key] !== false; }   // по умолчанию (undefined) = вкл
+// Подпись плитки - одна короткая строка даже на 320 px (две строки подписи под двухстрочным
+// названием выталкивали меню за экран): «всё вкл» / «всё выкл» / «звук выкл» (выключен один) /
+// «только вибро» (включён один).
+var PREF_SHORT = { sound: 'звук', haptics: 'вибро', hints: 'подсказки' };
+function prefsInfo() {
+  var on = PREFS.filter(function (p) { return prefOn(p.key); });
+  var off = PREFS.filter(function (p) { return !prefOn(p.key); });
+  if (!off.length) return 'всё вкл';
+  if (!on.length) return 'всё выкл';
+  if (off.length === 1) return PREF_SHORT[off[0].key] + ' выкл';
+  return 'только ' + PREF_SHORT[on[0].key];
+}
+// Строка-тумблер подменю: значок, подпись, выключатель (тот же .mi-sw, что был на плитках).
+function setRowHtml(id, cls, ic, t, sub) {
+  return '<button type="button" class="set-row ' + cls + '" id="' + id + '" aria-pressed="false">' +
+    '<span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ic + '</svg></span>' +
+    '<span class="set-tx"><span class="set-t">' + esc(t) + '</span><span class="set-s">' + esc(sub) + '</span></span>' +
+    '<span class="mi-sw" aria-hidden="true"><i></i></span></button>';
+}
+function paintRow(id, on) {
+  var b = $(id);
+  if (!b) return;
+  b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  b.querySelector('.mi-sw').className = 'mi-sw' + (on ? ' on' : '');
+}
+function paintPrefs() { PREFS.forEach(function (p) { paintRow(p.id, prefOn(p.key)); }); }
+function remindOn() { return !(window.Nudges && window.Nudges.remindOff && window.Nudges.remindOff()); }
+function paintCopy() { paintRow('cpRemind', remindOn()); }
+
+function toggleHaptic() {
   S.ui.haptics = S.ui.haptics === false;   // переключить; по умолчанию (undefined) = вкл
   save(); renderMenu(); if (S.ui.haptics !== false) haptic('light');
-});
+}
 // Тот же выключатель, что у вибрации: включили - сразу слышно, на чём остановились.
-$('mSound').addEventListener('click', function () {
+function toggleSound() {
   S.ui.sound = S.ui.sound === false;
   save(); renderMenu(); haptic('light');
   if (S.ui.sound !== false) sound('expense');   // проба звука при включении
-});
+}
 // Общий выключатель подсказок-хомяков: выкл — их нет нигде, вкл — показываются заново
 // (уважая уже погашенные свайпом). Ставит/снимает главную подсказку тут же.
-$('mHints').addEventListener('click', function () {
+function toggleHints() {
   S.ui.hints = S.ui.hints === false;
   save(); renderMenu(); haptic('light');
   if (window.UI.renderCard && cardOpen()) window.UI.renderCard();
   updateMainHint();
-});
+}
+var PREF_TOGGLE = { snSound: toggleSound, snHaptic: toggleHaptic, snHints: toggleHints };
+
+function openPrefs() {
+  openDlg({
+    title: 'Звук и подсказки',
+    body: '<div class="set-list">' + PREFS.map(function (p) { return setRowHtml(p.id, p.c, p.ic, p.t, p.s); }).join('') + '</div>',
+    buttons: [{ label: 'Закрыть', cls: 'nav' }],
+    onOpen: function () {
+      paintPrefs();
+      $('dlgBody').querySelector('.set-list').addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.set-row') : null;
+        if (b && PREF_TOGGLE[b.id]) PREF_TOGGLE[b.id]();
+      });
+    }
+  });
+}
+// «Копия данных»: сохранить и восстановить - те же Backup.backup / Backup.pickRestore, что
+// стояли на плитках; перед ними закрываем окно и меню (дальше системное окно выбора файла).
+function openCopy() {
+  openDlg({
+    title: 'Копия данных',
+    body: '<div class="set-p">' + esc('Копия - файл со всеми вашими данными. Храните его не только на телефоне: по нему всё вернётся после переустановки или на новом телефоне.') + '</div>' +
+      '<div class="op-pick">' +
+      '<button type="button" class="btn primary" id="cpSave">Сохранить копию в файл</button>' +
+      '<button type="button" class="btn ghost" id="cpRestore">Восстановить из файла</button>' +
+      '</div>' +
+      '<div class="set-list set-gap">' + setRowHtml('cpRemind', 'c-green', REMIND_IC, 'Напоминать раз в месяц', 'карточка внизу экрана') + '</div>',
+    buttons: [{ label: 'Закрыть', cls: 'nav' }],
+    onOpen: function () {
+      paintCopy();
+      $('cpSave').addEventListener('click', function () {
+        closeDlg(); closeMenu();
+        if (window.Backup && window.Backup.backup) window.Backup.backup();
+      });
+      $('cpRestore').addEventListener('click', function () {
+        closeDlg(); closeMenu();
+        if (window.Backup && window.Backup.pickRestore) window.Backup.pickRestore();
+      });
+      $('cpRemind').addEventListener('click', function () {
+        if (window.Nudges && window.Nudges.toggleRemind) window.Nudges.toggleRemind();
+        paintCopy();
+      });
+    }
+  });
+}
+$('mPrefs').addEventListener('click', openPrefs);
+$('mCopy').addEventListener('click', openCopy);
 // Чип «Free» - мягкий апселл: открывает баннер «Полный доступ» поверх меню (без аргумента
 // закрытие вернёт в меню). Чип «Pro» - просто статус, не тапается (role снят в renderMenu).
 (function () {
@@ -2192,7 +2305,7 @@ $('menu').addEventListener('pointerdown', function (e) {
 ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (t) {
   $('menu').addEventListener(t, function () { setTimeout(menuUnpress, 140); });
 });
-// #mBackup / #mRestore живут в backup.js, #mUpdate — в update.js, #mCats — открывает экран категорий
+// #mCopy - подменю openCopy (сохранение/восстановление в backup.js), #mUpdate — в update.js, #mCats — экран категорий
 
 // Внешняя ссылка. В APK Capacitor уводит любой чужой адрес в системный браузер:
 // window.open с любым target, кроме _self, проходит через onCreateWindow моста и
@@ -2212,9 +2325,10 @@ function openExternal(url) {
   return true;
 }
 
-var PRIVACY_URL = 'https://dorokhin-finance.ru/homyak/privacy.html';
-var TERMS_URL = 'https://dorokhin-finance.ru/homyak/terms.html';
-var SITE = 'https://dorokhin-finance.ru';
+// www: корень домена висел на IP узла CDN и лёг 05.10.2026; www (CNAME) живой
+var PRIVACY_URL = 'https://www.dorokhin-finance.ru/homyak/privacy.html';
+var TERMS_URL = 'https://www.dorokhin-finance.ru/homyak/terms.html';
+var SITE = 'https://www.dorokhin-finance.ru/';
 
 $('mAbout').addEventListener('click', function () {
   closeMenu();
@@ -2226,10 +2340,10 @@ $('mAbout').addEventListener('click', function () {
           '<span class="ab-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>' +
           '<div class="ab-ttl"><b>Хомяк</b> · v' + esc(menuVersion()) + '</div>' +
         '</div>' +
-        '<p class="ab-lead">Учёт личных финансов без облака и <b>без рекламы</b>. Кошельки, категории и месячные лимиты живут только на твоём телефоне.</p>' +
+        '<p class="ab-lead">Учёт личных финансов без облака и <b>без рекламы</b>. Кошельки, категории и месячные лимиты живут только на вашем телефоне.</p>' +
 
         '<div class="ab-h">Как записывать операции</div>' +
-        '<p class="ab-p">Перетаскивай плитки: нажми на плитку и, не отпуская, веди пальцем на нужную.</p>' +
+        '<p class="ab-p">Перетаскивайте плитки: нажмите на плитку и, не отпуская, ведите пальцем на нужную.</p>' +
         '<ul class="ab-list">' +
           '<li>кошелёк на категорию расхода - расход</li>' +
           '<li>источник дохода на кошелёк - доход</li>' +
@@ -2239,16 +2353,16 @@ $('mAbout').addEventListener('click', function () {
         '<div class="ab-h">Жесты и настройки</div>' +
         '<p class="ab-p">Короткий тап по плитке открывает её операции, долгий - правку и порядок. Кошельки, категории и лимиты настраиваются в меню - хомяк сверху слева, аналитика - справа.</p>' +
 
-        '<div class="ab-h">Документы</div>' +
-        '<p class="ab-linkrow"><a class="ab-link" data-ext="' + PRIVACY_URL + '" href="' + PRIVACY_URL + '">Политика конфиденциальности</a></p>' +
-        '<p class="ab-linkrow"><a class="ab-link" data-ext="' + TERMS_URL + '" href="' + TERMS_URL + '">Пользовательское соглашение</a></p>' +
+        '<div class="ab-h">Документы <span class="ab-ext" data-k="extNote">· ссылки ↗ откроются в браузере</span></div>' +
+        '<p class="ab-linkrow"><a class="ab-link" data-ext="' + PRIVACY_URL + '" href="' + PRIVACY_URL + '">Политика конфиденциальности ↗</a></p>' +
+        '<p class="ab-linkrow"><a class="ab-link" data-ext="' + TERMS_URL + '" href="' + TERMS_URL + '">Пользовательское соглашение ↗</a></p>' +
 
         '<div class="ab-h">Автор</div>' +
         '<p class="ab-author">Финансовый консультант Алексей Дорохин</p>' +
         '<p class="ab-contacts">' +
           '<a class="ab-link" data-ext="' + SITE + '" href="' + SITE + '">' +
             '<svg class="ab-cico" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18" stroke-linecap="round"/><path d="M12 3c2.6 2.7 2.6 15.3 0 18M12 3c-2.6 2.7-2.6 15.3 0 18"/></svg>' +
-            'dorokhin-finance.ru</a></p>' +
+            'dorokhin-finance.ru ↗</a></p>' +
       '</div>',
     buttons: [{ label: 'Понятно', cls: 'primary' }],
     // Возврат в «Меню» при любом закрытии (кнопка, фон, свайп вниз) - окно вызвано из меню.
@@ -2317,6 +2431,7 @@ function closeTop() {
 
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Escape') return;
+  if (window.AppLock && window.AppLock.isLocked && window.AppLock.isLocked()) return;
   closeTop();
 });
 
@@ -2327,6 +2442,8 @@ document.addEventListener('keydown', function (e) {
     var N = window.NativePlugins;
     if (!(window.isNativeApp && window.isNativeApp()) || !N || !N.App || !N.App.addListener) return;
     N.App.addListener('backButton', function () {
+      // под экраном «Защита входа» окна не листаем: «назад» просто сворачивает приложение
+      if (window.AppLock && window.AppLock.isLocked && window.AppLock.isLocked()) { try { N.App.exitApp(); } catch (e) {} return; }
       if (closeTop()) return;
       try { N.App.exitApp(); } catch (e) {}
     });
@@ -2387,7 +2504,7 @@ function openReelSheet() {
   openDlg({
     title: 'Демо-ролик',
     body: html,
-    buttons: [{ label: 'Закрыть', cls: 'ghost' }],
+    buttons: [{ label: 'Закрыть', cls: 'nav' }],
     onOpen: function () {
       each(document.querySelectorAll('#dlgBody [data-reel-p]'), function (b) {
         b.addEventListener('click', function () {
@@ -2429,7 +2546,7 @@ window.UI = {
   closeDlg: closeDlg, dlgOpen: dlgOpen, bindBackdropClose: bindBackdropClose, bindSwipeClose: bindSwipeClose,
   overlayFlags: overlayFlags, topOverlay: topOverlay, closeTop: closeTop,
   toast: toast, hideToast: hideToast, haptic: haptic, sound: sound, soundTx: soundTx,
-  openMenu: openMenu, closeMenu: closeMenu, makeGhost: makeGhost,
+  openMenu: openMenu, closeMenu: closeMenu, openPrefs: openPrefs, openCopy: openCopy, prefsInfo: prefsInfo, makeGhost: makeGhost,
   openAmount: openAmount, closeAmount: closeAmount, amountOpen: amountOpen, resolveDrop: resolveDrop, evalExpr: evalExpr, SNAP_MS: SNAP_MS,
   tileHtml: tileHtml, walletHtml: walletHtml, walletTileHtml: walletTileHtml, applyFill: applyFill, levelOf: levelOf, wcolor: wcolor,
   monthLabel: monthLabel, money: money, moneyInput: moneyInput, calcInput: calcInput,
@@ -2442,6 +2559,11 @@ window.UI = {
   bindHintSwipe: bindHintSwipe, updateMainHint: updateMainHint, mainHintKey: mainHintKey,
   fitSums: fitSums, hasFull: hasFull, onboardOpen: onboardOpen,
   wasRecovered: function () { return recovered; },
+  // сейчас на экране не данные хозяина, а сид после порчи (и из файла ещё не восстанавливали):
+  // копия таких данных - не копия, отметку «копия сделана» ставить нельзя (backup.js)
+  seedAfterBroken: function () { return recovered && !restored; },
+  showProblem: showProblem, problemOpen: problemOpen,
+  isReadOnly: function () { return readOnly; }, loadProblem: function () { return loadProblem; }, allowWrite: allowWrite,
   ringPx: function () { return GEO.size; },
   ringGeo: function () { return GEO; },
   expRows: function () { return expRowsCache; },
@@ -2450,6 +2572,8 @@ window.UI = {
   fieldGap: function () { return px(getComputedStyle($('app')).getPropertyValue('--fgap')); },
   relayout: relayout, toggleIncome: toggleIncome,
   incomeAnimating: function () { return !!incAnim; },
+  // BROKEN_KEY - приставка ключей карантина (Engine.quarantineKey: BROKEN_KEY-<дата-время>);
+  // сам ключ без даты писали версии до 1.0.2 включительно, его убирает Engine.pruneQuarantine
   KEY: KEY, BROKEN_KEY: KEY + '.broken', DEMO: DEMO
 };
 
@@ -2499,12 +2623,41 @@ render();
 // откатывать ли следующий запуск. Ставим её ПОСЛЕ render(), иначе доказательства нет.
 window.APP_READY = true;
 
-// О порче говорим один раз и уже на живом экране: хозяин должен понять, почему пусто,
-// и что бэкап из файла ещё спасает.
+// О порче говорим на живом экране: хозяин должен понять, почему пусто, и что копия из файла
+// ещё спасает. Окно одноразовое на запуск; закрыл его замок при уходе в фон - lock.js
+// покажет снова после входа (problemOpen/showProblem). lead - строка перед объяснением
+// (backup.js: почему обычная копия сейчас не сохраняется).
+function problemOpen() { return dlgOpen() && !!$('dlgProblem'); }
+function showProblem(lead) {
+    var pr = loadProblem || { kind: 'broken', copied: true };
+    var text = pr.kind === 'unreadable'
+      ? 'Телефон не дал прочитать сохранённые данные. Чтобы ничего не затереть, в этот раз изменения не сохраняются. Закройте приложение и откройте снова. Если не поможет - восстановите данные из копии: меню → «Копия данных» → «Восстановить из файла».'
+      : (pr.copied
+        ? 'Сохранённые данные оказались повреждены. Их копия отложена внутри приложения, ничего не стёрто. Сейчас открыты настройки по умолчанию - если есть копия в файле, восстановите её: меню → «Копия данных» → «Восстановить из файла».'
+        : 'Сохранённые данные оказались повреждены, а отложить их копию не вышло. Чтобы не затереть оригинал, в этот раз изменения не сохраняются. Восстановите данные из копии: меню → «Копия данных» → «Восстановить из файла».');
+    // Повреждённое можно унести в файл (отдать автору на разбор): копия в карантине
+    // или, если копии нет, сам оригинал под ключом. «Начать заново» намеренно нет -
+    // это стирание данных, его решает хозяин, а не приложение.
+    if (lead) text = lead + ' ' + text;
+    var rawKey = pr.kind === 'broken' ? (pr.copied ? pr.key : (pr.src || KEY)) : null;
+    var mark = '<span id="dlgProblem" hidden></span>';
+    if (!rawKey) { openDlg({ title: 'Данные не прочитались', body: esc(text) + mark, buttons: [{ label: 'Понятно', cls: 'primary' }] }); return; }
+    openDlg({
+      title: 'Данные не прочитались',
+      body: esc(text) + mark + '<div class="op-pick dlg-raw"><button type="button" class="btn ghost" id="dlgSaveRaw">Сохранить повреждённые данные в файл</button></div>',
+      buttons: [{ label: 'Понятно', cls: 'primary' }],
+      onOpen: function () {
+        var b = $('dlgSaveRaw');
+        if (b) b.addEventListener('click', function () {
+          var raw = null;
+          try { raw = localStorage.getItem(rawKey); } catch (e) {}
+          if (window.Backup && window.Backup.saveRaw) window.Backup.saveRaw(raw);
+        });
+      }
+    });
+}
 if (recovered) {
-  setTimeout(function () {
-    dlgAlert('Данные были повреждены, восстановлены настройки по умолчанию. Если есть бэкап - восстанови из файла.', 'Данные не прочитались');
-  }, 0);
+  setTimeout(function () { showProblem(); }, 0);
 } else {
   maybeOnboard();
 }

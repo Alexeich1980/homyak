@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Своя заставка «Хомяка» (1.0.3, tools/make-splash.py): фон тёмной темы приложения и хомяк
+     по центру. layer-list, а не картинка во весь экран: хомяк не растягивается на экранах
+     с другим соотношением сторон. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_bg" />
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash_hamster" />
+    </item>
+</layer-list>

@@ -1870,14 +1870,21 @@ body[data-theme="light"] .addtile-w { border-color: rgba(46,43,69,.32); backgrou
 body[data-theme="light"] .add-plus { color: var(--secondary); }
 
 /* приветственный онбординг (первый запуск) */
-#onboard { position: fixed; inset: 0; z-index: 999; background: rgba(6,12,15,.72); display: flex; align-items: center; justify-content: center; padding: 20px; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
+/* Подписи «Меню / Аналитика» стоят В ПОТОКЕ над карточкой (не absolute): раньше карточка
+   центровалась по всему экрану и на 320x640 / 360x640 наезжала на них. Теперь карточка
+   центруется в месте ПОД подписями (margin-block: auto), а если не влезает - слой
+   прокручивается, ничего не перекрывая. Замер OVERLAP в tools/qa-checks.js. */
+#onboard { position: fixed; inset: 0; z-index: 999; background: rgba(6,12,15,.72); display: flex; flex-direction: column; align-items: center; padding: calc(58px + env(safe-area-inset-top)) 20px calc(16px + env(safe-area-inset-bottom)); overflow-y: auto; -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); }
 #onboard[hidden] { display: none; }
-.ob-hint { position: absolute; top: calc(58px + env(safe-area-inset-top)); max-width: 46%; color: #fff; font-size: 12px; line-height: 1.3; }
+.ob-hints { flex: 0 0 auto; align-self: stretch; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin: 0 -6px 12px; }
+.ob-hint { max-width: 46%; color: #fff; font-size: 12px; line-height: 1.3; }
 .ob-hint b { display: block; font-size: 14px; margin-bottom: 2px; color: var(--accent); }
+/* светлая тема: тёмный акцент на затемнённом фоне почти не читался - подписи белые */
+body[data-theme="light"] .ob-hint b { color: #fff; }
 .ob-hint span { color: rgba(255,255,255,.8); }
-.ob-menu { left: 14px; text-align: left; }
-.ob-an { right: 14px; text-align: right; }
-.ob-card { width: 100%; max-width: 360px; background: var(--sheet); color: var(--text); border: 1px solid var(--surface-bd); border-radius: 20px; padding: 20px 18px; box-shadow: var(--shadow-up); text-align: center; }
+.ob-menu { text-align: left; }
+.ob-an { text-align: right; }
+.ob-card { flex: 0 0 auto; margin-block: auto; width: 100%; max-width: 360px; background: var(--sheet); color: var(--text); border: 1px solid var(--surface-bd); border-radius: 20px; padding: 20px 18px; box-shadow: var(--shadow-up); text-align: center; }
 .ob-ham { display: inline-grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; background: var(--avatar-bg); box-shadow: var(--avatar-glow); margin-bottom: 8px; }
 .ob-ham img { width: 82%; height: 82%; object-fit: contain; }
 .ob-t { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
@@ -1887,6 +1894,16 @@ body[data-theme="light"] .add-plus { color: var(--secondary); }
 .ob-dim { color: var(--muted); font-size: 13px; }
 .ob-first { font-weight: 700; }
 .ob-btn { width: 100%; margin-top: 6px; }
+/* низкий экран (640 и меньше по высоте): карточка плотнее, а строка «Кошельки... в меню,
+   Аналитика - справа» прячется - то же самое уже сказано подписями над карточкой */
+@media (max-height: 700px) {
+  .ob-card { padding: 14px 16px; }
+  .ob-ham { width: 44px; height: 44px; margin-bottom: 4px; }
+  .ob-t { font-size: 18px; margin-bottom: 6px; }
+  .ob-p, .ob-list { font-size: 13px; line-height: 1.4; }
+  .ob-list { margin-bottom: 8px; }
+  .ob-dim { display: none; }
+}
 
 /* ---------- планшет и широкий экран: аккуратная колонка по центру ----------
    Регламент android-app-build-checklist: телефонная вёрстка на относительных единицах на
@@ -1901,10 +1918,141 @@ body[data-theme="light"] .add-plus { color: var(--secondary); }
 #toast { max-width: calc(var(--colw) - 24px); margin-inline: auto; }
 #summary, #amount { padding-left: var(--side); padding-right: var(--side); }
 .fab { right: max(16px, calc(env(safe-area-inset-right) + 12px), calc(var(--side) + 16px)); }
-.ob-menu { left: calc(var(--side) + 14px); }
-.ob-an { right: calc(var(--side) + 14px); }
-.ob-hint { max-width: calc((min(100vw, var(--colw))) * .46); }
+.ob-hints { width: min(100%, calc(var(--colw) - 16px)); align-self: center; }
 /* пейволл: кнопки столбиком (класс ставит paywall на #dlgBtns, openDlg его сбрасывает).
    Главная «Купить в RuStore - 990 ₽» сверху во всю ширину - подпись не рвётся на две строки. */
 .dlg-btns.pw-btns { flex-direction: column-reverse; }
 .dlg-btns.pw-btns .btn { flex: 0 0 auto; width: 100%; }
+
+/* ---------- 1.0.3: «Защита входа» (lock.js) ----------
+   Экран замка закрывает всё приложение (выше окон, тоста, меню и приветствия #onboard
+   с его 999 - ревью 1.0.3). Непрозрачный фон - данные под ним не просвечивают.
+   .cover - шторка на время фона, без клавиатуры. */
+#lock {
+  position: fixed; inset: 0; z-index: 1000;
+  background: var(--bg); background-image: var(--bg-img);
+  color: var(--text);
+  display: flex; align-items: center; justify-content: center;
+  padding: calc(16px + env(safe-area-inset-top)) 16px calc(16px + env(safe-area-inset-bottom));
+}
+#lock[hidden] { display: none; }
+.lk-box { width: 100%; max-width: 320px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.lk-ham { width: 64px; height: 64px; border-radius: 50%; background: var(--avatar-bg); box-shadow: var(--avatar-glow); display: grid; place-items: center; overflow: hidden; }
+.lk-ham img { width: 52px; height: 52px; }
+.lk-t { font-size: 18px; font-weight: 800; }
+#lock.cover .lk-t, #lock.cover .lk-dots, #lock.cover .lk-msg, #lock.cover .lk-pad,
+#lock.cover .lk-link, #lock.cover .lk-sheet { display: none; }
+.lk-dots { display: flex; gap: 16px; justify-content: center; padding: 6px 0; }
+.lk-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); }
+.lk-dots i.on { background: var(--accent); border-color: var(--accent); }
+.lk-dots.bad i { border-color: var(--lv-over); }
+.lk-msg { min-height: 20px; font-size: 13px; line-height: 1.4; color: var(--secondary); text-align: center; }
+.lk-msg.warn { color: var(--lv-over); font-weight: 700; }
+.lk-pad { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.lk-key {
+  min-height: 60px; border-radius: 18px; font-size: 24px; font-weight: 700;
+  background: var(--key); color: var(--text); display: grid; place-items: center;
+}
+.lk-key:active { background: var(--key-a); }
+.lk-key:disabled { opacity: .35; }
+.lk-key.lk-empty { background: none; }
+.lk-key.lk-bio, .lk-key.lk-back { background: none; color: var(--secondary); }
+.lk-link { min-height: 40px; padding: 0 12px; color: var(--accent); font-size: 14px; font-weight: 700; }
+body[data-theme="light"] .lk-link { color: var(--num-ok); }
+.lk-sheet {
+  position: absolute; left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom));
+  background: var(--sheet); border: 1px solid var(--surface-bd); border-radius: 20px;
+  box-shadow: var(--shadow-up); padding: 18px;
+}
+.lk-sheet[hidden] { display: none; }
+.lk-sh-t { font-size: 17px; font-weight: 800; margin-bottom: 8px; }
+.lk-sh-p { font-size: 14px; line-height: 1.5; color: var(--secondary); margin-bottom: 14px; }
+.lk-sh-btns { display: flex; gap: 10px; }
+.lk-sh-btns .btn { flex: 1 1 0; }
+/* окно настройки кода в обычном #dlg */
+.lk-dlg { display: flex; flex-direction: column; gap: 10px; }
+.lk-dlg-p { font-size: 14px; line-height: 1.5; color: var(--secondary); margin-bottom: 8px; }
+.lk-dlg-p.lk-dim { color: var(--muted); }
+.lk-dlg .lk-key { min-height: 52px; font-size: 22px; background: var(--btn-ghost); border: 1px solid var(--btn-ghost-bd); }
+.lk-dlg .lk-key.lk-empty, .lk-dlg .lk-key.lk-back, .lk-dlg .lk-key.lk-bio { background: none; border: 0; }
+.op-pick .lk-off { color: var(--lv-over); }
+
+/* ---------- 1.0.3: напоминание «сохрани копию» (nudges.js) ----------
+   Внизу экрана, а не сверху: сверху карточка закрывала шапку «Потрачено». z-index 14 -
+   выше кнопки «плюс» (13) и подсказок (12), но ниже ЛЮБОГО слоя (меню 29+, карточка,
+   экран суммы, окна): открытый слой всегда накрывает её целиком (ревью 1.0.3). Пока
+   карточка видна, «плюс» и нижняя подсказка спрятаны (updateMainHint), чтобы не толкаться. */
+#remind {
+  position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom));
+  z-index: 14; margin: 0 auto; max-width: 420px;
+  background: var(--sheet); border: 1px solid var(--surface-bd);
+  border-radius: 18px; box-shadow: var(--shadow-up); padding: 14px;
+  animation: mhUp .22s ease-out;
+}
+#remind[hidden] { display: none; }
+.rm-t { font-size: 15px; font-weight: 800; margin-bottom: 4px; }
+.rm-p { font-size: 13px; line-height: 1.45; color: var(--secondary); margin-bottom: 12px; }
+.rm-btns { display: flex; gap: 10px; }
+.rm-btns .btn { white-space: nowrap; }
+.rm-btns .btn.nav { flex: 0 0 auto; padding: 0 18px; }
+.rm-btns .btn.primary { flex: 1 1 auto; }
+
+/* ---------- 1.0.3: меню - все плитки на одном экране без прокрутки (как «Пенсия» №108) ----------
+   05.10 (решение Алексея): 8 плиток вместо 12 - звук/вибрация/подсказки и копия данных ушли
+   в подменю. Плитка снова обычная: значок сверху, подпись под ним. Ряды одной высоты (по самой
+   высокой плитке), сетка не растягивается на весь экран - иначе 4 ряда раздувались до 160 px.
+   Меню шире (92%, не больше 340 px), чтобы подписи не рвались. На совсем низких экранах тело
+   меню по-прежнему прокручивается - подписи не ужимаем до нечитаемых. */
+#menu { width: 92%; max-width: 340px; }
+.menu-body { display: flex; flex-direction: column; padding-bottom: 10px; }
+.menu-body .demo-bar { flex: 0 0 auto; width: auto; margin: 10px 12px 0; padding: 7px 12px; }
+.menu-list { flex: 0 0 auto; grid-auto-rows: 1fr; gap: 10px; margin: 12px 12px 0; }
+.mi { min-height: 92px; padding: 12px 10px 12px 12px; }
+
+/* ---------- 1.0.3: подменю «Звук и подсказки» и «Копия данных» (ui.js openPrefs/openCopy) ----------
+   Строка-тумблер: значок плитки слева, подпись, выключатель .mi-sw справа. Это элемент
+   управления (как плитка меню), не кнопка действия: заливка и грань - как у плиток. */
+.set-list { display: flex; flex-direction: column; gap: 8px; }
+.set-list.set-gap { margin-top: 14px; }
+.set-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 56px; padding: 8px 12px;
+  text-align: left; border-radius: 14px; background: var(--surface); border: 1px solid var(--surface-bd);
+  color: var(--text); font: inherit;
+}
+body[data-theme="light"] .set-row { border-color: var(--tile-bd); box-shadow: var(--tile-shadow); }
+.set-row:active { filter: brightness(.96); }
+.set-row .mi-ic { flex: 0 0 auto; align-self: center; width: 32px; height: 32px; margin: 0; }
+.set-tx { flex: 1 1 auto; min-width: 0; }
+.set-t { display: block; font-size: 14px; line-height: 1.25; font-weight: 700; }
+.set-s { display: block; font-size: 12px; line-height: 1.3; color: var(--muted); margin-top: 2px; }
+.set-row .mi-sw { position: relative; top: auto; right: auto; flex: 0 0 auto; align-self: center; margin: 0; }
+.set-row.c-pink  { --mc: var(--hue-5); }
+.set-row.c-coral { --mc: var(--hue-1); }
+.set-row.c-teal  { --mc: var(--hue-0); }
+.set-row.c-green { --mc: var(--lv-ok); }
+.set-p { font-size: 13px; line-height: 1.45; color: var(--secondary); margin-bottom: 12px; }
+
+/* ---------- 1.0.3: три вида кнопок (как «Пенсия» №121) ----------
+   ДЕЙСТВИЕ - сплошная: .btn.primary (главное), .btn.ghost (второстепенное - сплошная
+   нейтральная), .btn.danger (опасное); тост «Отменить» - тоже сплошная.
+   ПЕРЕХОД - контурная .btn.nav (Отмена, Закрыть, Позже), значки «×/‹», карточки с «›».
+   ПОДСКАЗКА - строка без заливки: значок «i» слева, «›» справа («Забыл код»); внешний сайт -
+   ссылка с «↗» и подписью «откроется в браузере». Заслон - tools/qa-checks.js (KINDS). */
+.btn.nav { background: transparent; color: var(--text); border: 1.5px solid var(--btn-nav-bd); }
+.tbtn { background: var(--btn-ghost-strong); }
+.info-row { display: inline-flex; align-items: center; gap: 8px; background: none; border: 0; }
+.info-row::after { content: "›"; font-size: 18px; line-height: 1; margin-left: 2px; opacity: .8; }
+.i-ico {
+  width: 20px; height: 20px; border-radius: 50%; border: 1.6px solid currentColor;
+  display: inline-grid; place-items: center; flex: none; font-style: normal;
+  font-size: 12px; font-weight: 800; line-height: 1; font-family: Georgia, 'Times New Roman', serif;
+}
+.i-ico::before { content: "i"; }
+.about .ab-ext { color: var(--muted); font-size: 11.5px; font-weight: 600; }
+:root, body[data-theme="dark"] { --btn-nav-bd: rgba(255,255,255,.30); --btn-ghost-strong: rgba(255,255,255,.10); }
+body[data-theme="light"] { --btn-nav-bd: rgba(20,24,40,.22); --btn-ghost-strong: rgba(20,24,40,.07); }
+
+/* 1.0.3 (ревью): окно «Данные не прочитались» - кнопка «Сохранить повреждённые данные в
+   файл» под текстом, одной строкой (на 360 px подпись иначе рвалась на «в / файл»). */
+.dlg-raw { margin-top: 14px; }
+.dlg-raw .btn { font-size: 14px; padding: 0 10px; white-space: nowrap; }

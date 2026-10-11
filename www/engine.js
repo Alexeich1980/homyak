@@ -30,7 +30,7 @@
   // числу переноситься по строке), минус — типографский, копейки показываем только когда
   // они есть, и тогда две цифры через запятую. Всё, что печатает или принимает суммы,
   // ходит сюда: свой replace на месте — источник разнобоя.
-  var NBSP = ' ';
+  var NBSP = '\u00a0';
   function group(s) { return String(s).replace(/\B(?=(\d{3})+(?!\d))/g, NBSP); }
   function fmt(n) {
     n = Number(n);
@@ -913,13 +913,18 @@
     }
     return true;
   }
-  function importJSON(str) {
+  // opts.keepDemo - оставить метку демо из файла (только тест-сборка). Бэкап, снятый в
+  // тест-сборке, несёт ui.demo=true; в релизе по ней в меню встала бы плашка «Очистить
+  // демо-данные», и одно нажатие стёрло бы настоящие данные (найдено 01.10.2026).
+  function importJSON(str, opts) {
     var o; try { o = JSON.parse(str); } catch (e) { throw new Error('format'); }
     // принимаем и новый тег 'homyak', и легаси 'kazna' (старое рабочее имя): бэкапы,
     // снятые до переименования, обязаны восстанавливаться
     if (!isObj(o) || (o.app !== 'homyak' && o.app !== 'kazna') || !isObj(o.state)) throw new Error('format');
     if (!backupShape(o.state)) throw new Error('schema');
-    return migrate(o.state);
+    var S = migrate(o.state);
+    if (!(opts && opts.keepDemo) && S.ui) S.ui.demo = false;
+    return S;
   }
 
   // ---------- жесты: чистые ступени, без DOM ----------
@@ -1053,6 +1058,80 @@
     return level === 'over' ? 'over' : 'expense';
   }
 
+  // ---------- защита от тихого затирания (1.0.3, по образцу «Карты года» I1) ----------
+  // «Ключа нет» (первый запуск) ≠ «ключ есть, но не читается». raw - строка из хранилища
+  // (null - нет), readErr - исключение getItem. kind:
+  //   empty      - данных нет, можно засевать пресет;
+  //   ok         - разобралось (state - уже мигрированное состояние);
+  //   broken     - текст есть, но это не наши данные / обрезан / форма поехала;
+  //   unreadable - хранилище не открылось: читать нечего, но и писать нельзя - оригинал
+  //                может лежать целым, мы его просто не видим.
+  function classifyStored(raw, readErr) {
+    if (readErr) return { kind: 'unreadable' };
+    if (raw == null || raw === '') return { kind: 'empty' };
+    var p;
+    try { p = JSON.parse(raw); } catch (e) { return { kind: 'broken' }; }
+    if (!p || typeof p !== 'object' || Array.isArray(p)) return { kind: 'broken' };
+    var st = null;
+    try { st = migrate(p); } catch (e) { return { kind: 'broken' }; }
+    if (!st || !Array.isArray(st.tx) || !Array.isArray(st.wallets)) return { kind: 'broken' };
+    return { kind: 'ok', state: st };
+  }
+  // Ключ карантина: homyak_v1.broken-2026-10-05T18-30-05 - своя копия на каждый случай порчи,
+  // вторая порча не затирает первую.
+  function quarantineKey(key, now) {
+    var t = (now instanceof Date) ? now : new Date(now == null ? Date.now() : now);
+    return key + '.broken-' + t.getFullYear() + '-' + pad2(t.getMonth() + 1) + '-' + pad2(t.getDate()) +
+      'T' + pad2(t.getHours()) + '-' + pad2(t.getMinutes()) + '-' + pad2(t.getSeconds());
+  }
+  // Отложить битый текст в карантин с проверкой чтением. storage - localStorage (или подмена
+  // в тестах). Ключ занят (две порчи за секунду) - добавляем номер. {key, copied}: copied=false
+  // значит копии нет, и оригинал трогать НЕЛЬЗЯ (в этой сессии не пишем).
+  // Не легла копия, а место держит наследный ключ key + '.broken' (версии до 1.0.2 включительно,
+  // до 4 МБ старой порчи) - убираем его и пробуем ещё раз: свежая порча важнее (ревью 1.0.3).
+  function quarantine(storage, key, raw, now) {
+    var base = quarantineKey(key, now), k = base, n = 1;
+    try { while (storage.getItem(k) !== null && n < 50) { n++; k = base + '-' + n; } } catch (e) {}
+    var copied = put(storage, k, raw);
+    if (!copied) {
+      var had = false;
+      try { had = storage.getItem(key + '.broken') !== null; } catch (e) {}
+      if (had) {
+        try { storage.removeItem(key + '.broken'); } catch (e) {}
+        copied = put(storage, k, raw);
+      }
+    }
+    return { key: k, copied: copied };
+  }
+  function put(storage, k, raw) {
+    try { storage.setItem(k, String(raw)); return storage.getItem(k) === String(raw); } catch (e) { return false; }
+  }
+
+  // Уборка карантина (1.0.3): копии старше days дней удаляем, САМУЮ СВЕЖУЮ оставляем
+  // всегда, даже если и она старая (вдруг это единственный след порчи). Дата - из имени
+  // ключа (quarantineKey), чужие ключи не трогаем. Возвращает удалённые ключи.
+  // Наследный ключ без даты key + '.broken' (версии до 1.0.2 включительно) - самая старая
+  // копия: уходит, как только есть копия новее; единственной остаётся (ревью 1.0.3).
+  function pruneQuarantine(storage, key, now, days) {
+    var pre = key + '.broken-', legacy = key + '.broken', list = [], i, k;
+    var re = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})(?:-\d+)?$/;
+    for (i = 0; i < storage.length; i++) {
+      k = storage.key(i);
+      if (k === legacy) { list.push({ k: k, t: -1, n: '' }); continue; }
+      if (typeof k !== 'string' || k.indexOf(pre) !== 0) continue;
+      var m = re.exec(k.slice(pre.length));
+      if (!m) continue;
+      list.push({ k: k, t: new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]).getTime(), n: k });
+    }
+    list.sort(function (x, y) { return x.t - y.t || (x.n < y.n ? -1 : x.n > y.n ? 1 : 0); });
+    var edge = Number(now) - (days == null ? 30 : days) * 86400000, removed = [];
+    for (i = 0; i < list.length - 1; i++) {
+      if (list[i].t >= edge) continue;
+      try { storage.removeItem(list[i].k); removed.push(list[i].k); } catch (e) {}
+    }
+    return removed;
+  }
+
   return {
     VER: VER, MAX_AMOUNT: MAX_AMOUNT, defaultState: defaultState, migrate: migrate, uid: uid,
     PRESS_PICKUP: PRESS_PICKUP, PRESS_EDIT: PRESS_EDIT, pressPhase: pressPhase,
@@ -1081,6 +1160,7 @@
     isFrozen: isFrozen, monthBreakdown: monthBreakdown, daySpend: daySpend, attention: attention, monthlyTotals: monthlyTotals, reorder: reorder, reorderAllowed: reorderAllowed,
     walletsTotal: walletsTotal, txDelta: txDelta, dayLabel: dayLabel, feedByDay: feedByDay,
     safeFileName: safeFileName,
-    exportJSON: exportJSON, importJSON: importJSON
+    exportJSON: exportJSON, importJSON: importJSON,
+    classifyStored: classifyStored, quarantineKey: quarantineKey, quarantine: quarantine, pruneQuarantine: pruneQuarantine
   };
 });

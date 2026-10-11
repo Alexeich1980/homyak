@@ -1,52 +1,52 @@
-/* update.js — проверка обновления и само обновление. Единственный выход в интернет
-   во всём приложении. В сеть ходим в двух случаях: по нажатию «Проверить» в меню
-   (check, с окнами) и тихо раз в неделю при запуске (weeklyCheck → silentCheck, без
-   окон: только точка «есть обновление» в меню). Ничего, кроме манифеста с номером
-   версии, при этом не запрашивается, и ничего о хозяине не отправляется.
+/* update.js — проверка обновления и само обновление.
 
-   СТОРОВАЯ сборка (Access.STORE, вшивается build-lib.js при --store): обновления
-   ТОЛЬКО через RuStore. Сравниваем только номер оболочки (m.version) со своим; если
-   на канале новее - окно с кнопкой «Открыть в RuStore». Раздел web и apkUrl из
-   манифеста при STORE игнорируются: ни скачивания zip/APK, ни подмены веб-сборки.
-   Ниже описан не-сторовый путь (релиз напрямую клиентам и тест-сборка).
+   СТОРОВАЯ сборка (Access.STORE, вшивается build-lib.js при --store), с 1.0.3: обновления
+   ТОЛЬКО через RuStore App Update SDK (нативный плагин RuStoreUpdate,
+   android/.../RuStoreUpdatePlugin.java, перенесён из «Карты года»). SDK спрашивает у
+   приложения RuStore на телефоне, есть ли в магазине версия новее, и само ставит её своим
+   окном. Свой манифест на CDN стор-сборка НЕ читает (05.10.2026: CDN не отдавал CORS,
+   корень домена лёг - проверка писала «Нет связи» при живом интернете). Веб-часть стор-сборки
+   в сеть не ходит вовсе: CSP connect-src 'none' (build-lib.js shipCsp). Проверка тихо раз в
+   неделю при запуске (метка updCheckAt) и по кнопке «Проверить»; найденная версия живёт
+   между запусками (updNewer), пока её не поставят.
 
-   Канал: https://dorokhin-finance.ru/homyak-store/update.json, вид манифеста
+   ТЕСТ-СБОРКА (только Алексею): прежний путь через свой манифест, описан ниже. SDK в ней не
+   зовём: у неё тот же applicationId, и RuStore предложил бы поставить магазинную версию
+   поверх тестовой. Сеть - только к www.dorokhin-finance.ru (CSP в index.html).
+
+   Канал тест-сборки: https://www.dorokhin-finance.ru/homyak-store/update.json, вид манифеста
 
      {
        "version": "0.3.0",                                  // версия ОБОЛОЧКИ (APK)
-       "apkUrl":  "https://dorokhin-finance.ru/homyak-store/homyak-0.3.0.apk",
+       "apkUrl":  "https://www.dorokhin-finance.ru/homyak-store/homyak-0.3.0.apk",
        "size":    3120000,
        "notes":   "что нового",
        "web": {                                             // необязательный раздел
          "version":  "0.3.1",                               // версия ВЕБ-СБОРКИ
-         "url":      "https://dorokhin-finance.ru/homyak-store/www-0.3.1.zip",
+         "url":      "https://www.dorokhin-finance.ru/homyak-store/www-0.3.1.zip",
          "sha256":   "…64 шестнадцатеричных знака…",
          "size":     520000,
          "minShell": "0.3.0"                                // с какой оболочки поедет
        }
      }
 
-   Верхние поля оставлены как были: 0.2.2, которая про «web» не знает, читает только их
-   и продолжает работать по-старому.
-
-   Два канала:
-     1. ВЕБ (обычный путь). Приложение — это папка www; её и подменяем: качаем zip,
-        сверяем sha256, распаковываем в личную папку телефона, показываем WebView на
-        новую папку и перезапускаемся. Одна кнопка, несколько секунд, окна установки
-        Android нет. Заслон от кирпича — в boot.js.
-     2. APK (редко, когда меняется сама оболочка: плагины, права, версия Android).
-        Как и раньше: открываем файл в системном браузере, дальше Android сам.
+   Два канала (только не-стор):
+     1. ВЕБ. Приложение — это папка www; её и подменяем: качаем zip, сверяем sha256,
+        распаковываем в личную папку телефона, показываем WebView на новую папку и
+        перезапускаемся. Заслон от кирпича — в boot.js.
+     2. APK (когда меняется сама оболочка): открываем файл в системном браузере.
         Новых разрешений не просим - REQUEST_INSTALL_PACKAGES в приложении нет.
 
-   Чистая часть (сравнение версий, разбор манифеста, решение «что делать», безопасность
-   путей из архива) вынесена наружу как у engine.js: она проверяется node-тестами. */
+   Чистая часть (сравнение версий, разбор манифеста и ответа RuStore, решение «что делать»,
+   безопасность путей из архива) вынесена наружу как у engine.js: её проверяют node-тесты. */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
   else { root.Update = factory(); root.Update.mount(); }
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  var URL_MANIFEST = 'https://dorokhin-finance.ru/homyak-store/update.json';
+  // www: корень домена висел на IP узла CDN и лёг 05.10.2026, www (CNAME) живой
+  var URL_MANIFEST = 'https://www.dorokhin-finance.ru/homyak-store/update.json';
   // Страница приложения в RuStore - туда уводим сторовую сборку за обновлением.
   var URL_RUSTORE = 'https://www.rustore.ru/catalog/app/ru.dorokhin.homyak';
   // Файлы берём только со своего домена: подменённый манифест не должен уметь
@@ -70,14 +70,14 @@
   // данных, переезд WebView), а знать, куда откатываться, надо всё равно.
   var STATE_PATH = 'ota/state.json';
 
-  var ERR_NET = 'Нет связи с интернетом. Проверь Wi-Fi или мобильный интернет';
-  var ERR_SERVER = 'Сервер обновлений не ответил. Попробуй позже';
-  var ERR_SLOW = 'Обновление качается слишком долго - сеть слишком медленная. Попробуй по Wi-Fi';
-  var ERR_BAD = 'Сервер прислал непонятный ответ. Попробуй позже';
-  var ERR_HASH = 'Файл обновления скачался повреждённым. Ничего не менял, попробуй ещё раз';
-  var ERR_ZIP = 'Файл обновления не распаковался. Ничего не менял, попробуй ещё раз';
-  var ERR_BIG = 'Файл обновления подозрительно большой. Ничего не менял';
-  var ERR_WRITE = 'Не удалось записать обновление в память телефона. Ничего не менял';
+  var ERR_NET = 'Нет связи с интернетом. Проверьте Wi-Fi или мобильный интернет';
+  var ERR_SERVER = 'Сервер обновлений не ответил. Попробуйте позже';
+  var ERR_SLOW = 'Обновление качается слишком долго - сеть слишком медленная. Попробуйте по Wi-Fi';
+  var ERR_BAD = 'Сервер прислал непонятный ответ. Попробуйте позже';
+  var ERR_HASH = 'Файл обновления скачался повреждённым. Ничего не изменено, попробуйте ещё раз';
+  var ERR_ZIP = 'Файл обновления не распаковался. Ничего не изменено, попробуйте ещё раз';
+  var ERR_BIG = 'Файл обновления подозрительно большой. Ничего не изменено';
+  var ERR_WRITE = 'Не удалось записать обновление в память телефона. Ничего не изменено';
   var ERR_ONLYAPP = 'Доступно только в приложении на телефоне';
 
   // ---------- чистая часть ----------
@@ -105,6 +105,19 @@
 
   function isVer(v) { return /^\d+(\.\d+){0,2}$/.test(String(v == null ? '' : v).trim()); }
 
+  // Архив веб-сборки качает сама веб-часть (fetch), а CSP тест-сборки пускает только
+  // https://www.dorokhin-finance.ru (index.html, build-lib.js CSP_CONNECT_DEV). Адрес на голом
+  // домене переводим на www (тот же сайт), прочие поддомены CSP закроет - такой раздел web
+  // не принимаем: иначе вместо обновления «Нет связи» (ревью 1.0.3).
+  var WEB_HOST = 'www.' + HOST;
+  function webUrl(url) {
+    var m = String(url).match(/^https:\/\/([^\/:?#]+)(.*)$/i);
+    if (!m) return null;
+    var h = m[1].toLowerCase();
+    if (h === HOST) return 'https://' + WEB_HOST + m[2];
+    return h === WEB_HOST ? url : null;
+  }
+
   // адрес должен вести на свой домен (или его поддомен) и только по https
   function hostOf(url) {
     var m = String(url).match(/^https:\/\/([^\/:?#]+)/i);
@@ -122,6 +135,8 @@
     if (!/^https:\/\//i.test(url)) return null;
     if (!/\.zip(\?|$)/i.test(url)) return null;
     if (!hostOf(url)) return null;
+    url = webUrl(url);
+    if (!url) return null;
     var sha = String(o.sha256 == null ? '' : o.sha256).trim().toLowerCase();
     if (!/^[0-9a-f]{64}$/.test(sha)) return null;
     var size = typeof o.size === 'number' && isFinite(o.size) && o.size > 0 ? Math.round(o.size) : 0;
@@ -202,16 +217,119 @@
     return cmpVer(loadedVer, s) <= 0;
   }
 
-  // Решение для СТОРОВОЙ сборки: только номер оболочки против своего, web и apkUrl
-  // не смотрим вовсе. shellVer null/'' (Android не ответил) - сравнивать нечем, 'none'.
-  // Ответ: {kind:'store', version} | {kind:'none'} | {kind:'error'}.
-  function decideStore(m, shellVer) {
-    if (!m) return { kind: 'error' };
-    var s = String(shellVer == null ? '' : shellVer);
-    if (!s) return { kind: 'none' };
-    if (cmpVer(m.version, s) > 0) return { kind: 'store', version: m.version, notes: m.notes };
+  // ---------- стор: RuStore App Update SDK (чистая часть) ----------
+  // Ответ плагина RuStoreUpdate.checkUpdate() → решение:
+  //   {kind:'store', versionCode} - в RuStore есть версия новее;
+  //   {kind:'none'}               - новее нет;
+  //   {kind:'error', message}     - нет RuStore / сбой SDK / нет ответа (честная строка на «вы»).
+  var MSG_NO_RUSTORE = 'На телефоне нет приложения RuStore - проверить обновление не получится. «Хомяк» обновляется через RuStore.';
+  var MSG_SDK_FAIL = 'RuStore сейчас не ответил. Проверьте интернет и попробуйте позже.';
+  var T_SDK = 15000;              // RuStore отвечает через своё приложение; дольше не ждём
+  var UNKNOWN = 'unknown';        // RuStore сказал «есть», но без номера
+
+  function vcode(v) { var n = Number(v); return (isFinite(n) && n > 0) ? Math.floor(n) : 0; }
+
+  function decideSdk(r) {
+    if (!r || typeof r !== 'object') return { kind: 'error', message: MSG_SDK_FAIL };
+    if (r.ok !== true) return { kind: 'error', message: r.reason === 'no-rustore' ? MSG_NO_RUSTORE : MSG_SDK_FAIL };
+    var nv = vcode(r.versionCode), cur = vcode(r.currentVersionCode);
+    if (r.available === true && (!cur || !nv || nv > cur)) return { kind: 'store', versionCode: nv };
     return { kind: 'none' };
   }
+
+  // versionCode стор-сборки → номер версии для человека. Формула сборки (build-lib.js
+  // versionCodeOf): code = (major*10000 + minor*100 + patch)*2 + 1. 20007 → «1.0.3».
+  // Не похоже на наш код - '' (окно скажет «новая версия» без номера).
+  function verOfCode(code) {
+    var c = vcode(code);
+    if (!c || c % 2 !== 1) return '';
+    var base = (c - 1) / 2;
+    var major = Math.floor(base / 10000), minor = Math.floor((base % 10000) / 100), patch = base % 100;
+    return major + '.' + minor + '.' + patch;
+  }
+  function codeOfVer(v) {
+    if (!isVer(v)) return 0;
+    var p = parts(v);
+    return (p[0] * 10000 + p[1] * 100 + p[2]) * 2 + 1;
+  }
+
+  // Найденная версия ещё актуальна? stored - versionCode из памяти (или UNKNOWN), shell -
+  // версия установленной оболочки (null - Android ещё не ответил). Поставили её или новее -
+  // отметку снимаем. «Есть, но без номера» (UNKNOWN) помним вместе с оболочкой, при которой
+  // RuStore это сказал (base): оболочка сменилась - значит обновление поставили, точка
+  // «новая» на актуальной версии не висит (ревью 1.0.3).
+  function stillNewer(stored, shell, base) {
+    if (stored === UNKNOWN) return !(base && shell && String(base) !== String(shell));
+    var v = vcode(stored);
+    if (!v) return false;
+    var cur = codeOfVer(shell);
+    return !cur || v > cur;
+  }
+
+  // Запись K_NEWER: versionCode числом, '?' или '?@<оболочка>' → {stored, base} | null
+  function parseNewer(raw) {
+    var s = String(raw == null ? '' : raw);
+    if (!s) return null;
+    if (s.charAt(0) === '?') return { stored: UNKNOWN, base: s.indexOf('?@') === 0 ? s.slice(2) : '' };
+    var v = vcode(s);
+    return v ? { stored: v, base: '' } : null;
+  }
+  function newerRecord(d, shell) {
+    if (d.versionCode) return String(d.versionCode);
+    return '?' + (shell ? '@' + shell : '');
+  }
+
+  // Пора ли тихо спрашивать RuStore: прошло >= 7 дней с последней удачной проверки. Метка
+  // из будущего (часы перевели назад) - пора, иначе проверка застряла бы надолго.
+  function weekDue(last, now) {
+    var l = Number(last) || 0;
+    if (l > now) return true;
+    return now - l >= 7 * 24 * 60 * 60 * 1000;
+  }
+
+  // Спросить RuStore. opts.native - подложенный плагин (тесты/self-test), opts.timeout.
+  // Promise<решение>, никогда не отклоняется.
+  function checkSdk(opts) {
+    opts = opts || {};
+    var p = sdkPlugin(opts);
+    if (!p || typeof p.checkUpdate !== 'function') return Promise.resolve({ kind: 'error', message: MSG_NO_RUSTORE });
+    var timer = null;
+    var clock = new Promise(function (res) { timer = setTimeout(function () { res(null); }, opts.timeout || T_SDK); });
+    var req = Promise.resolve().then(function () { return p.checkUpdate(); }).then(null, function () { return null; });
+    return Promise.race([req, clock]).then(function (r) { clearTimeout(timer); return decideSdk(r); });
+  }
+
+  // «Обновить»: окно обновления RuStore; не открылось (сбой потока, {ok:false}) - карточка
+  // приложения в самом RuStore (deeplink плагина openStore, RuStoreUpdatePlugin.java); нет
+  // плагина или и он отказал - страница RuStore в браузере (ревью 1.0.3: раньше сбой потока
+  // сразу уводил в браузер).
+  function startSdkUpdate(opts, openExternal) {
+    opts = opts || {};
+    var p = sdkPlugin(opts);
+    var web = function () { if (typeof openExternal === 'function') openExternal(URL_RUSTORE); return { ok: true, via: 'web' }; };
+    if (!p || typeof p.startUpdate !== 'function') return Promise.resolve(web());
+    var card = function () {
+      if (typeof p.openStore !== 'function') return web();
+      return Promise.resolve().then(function () { return p.openStore(); })
+        .then(function (r) { return (r && r.ok) ? r : web(); }, function () { return web(); });
+    };
+    return Promise.resolve().then(function () { return p.startUpdate(); })
+      .then(function (r) { return (r && r.ok) ? r : card(); }, function () { return card(); });
+  }
+
+  function sdkPlugin(opts) {
+    if (opts && 'native' in opts) return opts.native;
+    if (sdkOverride !== undefined) return sdkOverride;
+    try {
+      if (typeof window === 'undefined' || !(window.isNativeApp && window.isNativeApp())) return null;
+      var N = window.NativePlugins;
+      if (N && N.RuStoreUpdate) return N.RuStoreUpdate;
+      var C = window.Capacitor;
+      return (C && C.Plugins && C.Plugins.RuStoreUpdate) ||
+        (C && typeof C.registerPlugin === 'function' ? C.registerPlugin('RuStoreUpdate') : null);
+    } catch (e) { return null; }
+  }
+  var sdkOverride;   // self-test: подложенный плагин (undefined - настоящий)
 
   // Имя файла из архива → безопасный относительный путь или null.
   // Архив приходит со своего домена и проверен по sha256, но пишем мы им в личную
@@ -356,7 +474,29 @@
   // до первого нажатия «Проверить» тут пусто, и меню молчит.
   var newerVer = '';
 
-  function newer() { return newerVer; }
+  // Стор: найденная в RuStore версия живёт между запусками (K_NEWER), пока её не поставят -
+  // точка на плитке «Обновление» не гаснет до следующей недельной проверки.
+  var K_NEWER = 'updNewer';
+  function newer() {
+    if (!isStore()) return newerVer;
+    var raw = null, st = ls();
+    try { raw = st ? st.getItem(K_NEWER) : null; } catch (e) {}
+    var p = parseNewer(raw);
+    if (!p) return '';
+    var stored = p.stored;
+    if (!stillNewer(stored, shellVer(), p.base)) {
+      if (shellVer()) { try { st.removeItem(K_NEWER); } catch (e) {} }
+      return '';
+    }
+    return stored === UNKNOWN ? 'новая' : (verOfCode(stored) || 'новая');
+  }
+  function setNewerSdk(d) {
+    var st = ls(); if (!st) return;
+    try {
+      if (d.kind === 'store') st.setItem(K_NEWER, newerRecord(d, shellVer()));
+      else if (d.kind === 'none') st.removeItem(K_NEWER);
+    } catch (e) {}
+  }
 
   function ver() { return String((typeof window !== 'undefined' && window.APP_VERSION) || '0'); }
   // Номер ОБОЛОЧКИ или null, если Android ещё не ответил. Подставлять сюда версию
@@ -384,7 +524,9 @@
   }
 
   // Сторовая сборка? access.js грузится раньше update.js, читаем его флаг.
+  var storeOverride;   // self-test: прогнать стор-путь в демо (undefined - как собрано)
   function isStore() {
+    if (storeOverride !== undefined) return !!storeOverride;
     try { return !!(window.Access && window.Access.STORE); } catch (e) { return false; }
   }
 
@@ -441,24 +583,31 @@
       title: 'Обновление',
       body: box('<p>Установлена версия ' + UI.esc(verLine()) + '</p>'),
       buttons: [
-        { label: 'Закрыть', cls: 'ghost' },
+        { label: 'Закрыть', cls: 'nav' },
         { label: 'Проверить', cls: 'primary', onClick: function () { check(); return false; } }
       ]
     });
   }
 
+  // Окно ожидания с меткой #updWait. Ответ проверки показываем, только если оно ещё на
+  // экране: «Отмена», «назад» или другое окно поверх - хозяин занят другим, и окно с
+  // результатом через 15 с ему не нужно (ревью 1.0.3). Память (точка в меню) обновляется всё равно.
   function dlgWait() {
     UI.openDlg({
       title: 'Обновление',
-      body: box('<p>Смотрю на сервере…</p>'),
-      buttons: [{ label: 'Отмена', cls: 'ghost' }]
+      body: box('<p id="updWait">' + (isStore() ? 'Спрашиваю RuStore…' : 'Смотрю на сервере…') + '</p>'),
+      buttons: [{ label: 'Отмена', cls: 'nav' }]
     });
+  }
+  function waiting() {
+    // closeDlg очищает тело окна, новое окно его заменяет - метки нет ровно тогда, когда ждать некому
+    try { return !!document.getElementById('updWait'); } catch (e) { return false; }
   }
 
   function dlgFresh() {
     UI.openDlg({
       title: 'Обновление',
-      body: box('<p>У тебя последняя версия<span class="upd-v">' + UI.esc(verLine()) + '</span></p>'),
+      body: box('<p>У вас последняя версия<span class="upd-v">' + UI.esc(verLine()) + '</span></p>'),
       buttons: [{ label: 'Понятно', cls: 'primary' }]
     });
   }
@@ -469,11 +618,11 @@
 
   // Бесшовное: одна кнопка, несколько секунд, окна установки Android нет.
   function dlgOta(d) {
-    if (isStore()) { dlgStore(d); return; }   // стор: самоподмены кода нет ни при каком раскладе
+    if (isStore()) return;   // стор: самоподмены кода нет ни при каком раскладе (и манифест не читается)
     var size = mbOf(d.size);
     var head = 'Обновление ' + d.version + (size ? ' · ' + size : '') + ' · без переустановки';
     var can = isNative();
-    var btns = [{ label: 'Закрыть', cls: 'ghost' }];
+    var btns = [{ label: 'Закрыть', cls: 'nav' }];
     if (can) btns.push({ label: 'Обновить', cls: 'primary', onClick: function () { apply(d.web); return false; } });
     UI.openDlg({
       title: 'Есть обновление',
@@ -502,15 +651,15 @@
 
   // APK: меняется сама оболочка, тут без Android не обойтись.
   function dlgApk(d) {
-    if (isStore()) { dlgStore(d); return; }   // стор: никаких скачиваний APK в обход RuStore
+    if (isStore()) return;   // стор: никаких скачиваний APK в обход RuStore
     var size = mbOf(d.size);
     var can = isNative();
-    var btns = [{ label: 'Закрыть', cls: 'ghost' }];
+    var btns = [{ label: 'Закрыть', cls: 'nav' }];
     // Бэкап предлагаем только на телефоне: обновление с переустановкой уводит хозяина в
     // системный установщик Android, риск для данных выше, чем при бесшовном OTA.
-    if (can) btns.push({ label: 'Сохранить бэкап', cls: 'ghost', onClick: function () {
+    if (can) btns.push({ label: 'Сохранить копию', cls: 'ghost', onClick: function () {
       try { if (window.Backup && window.Backup.backup) window.Backup.backup(); } catch (e) {}
-      return false;   // окно не закрываем: после бэкапа хозяин нажмёт «Скачать»
+      return false;   // окно не закрываем: после копии хозяин нажмёт «Скачать»
     } });
     btns.push({ label: 'Скачать', cls: 'primary', onClick: function () { UI.openExternal(d.apkUrl); } });
     UI.openDlg({
@@ -521,25 +670,30 @@
         (d.shellUnknown
           ? '<p class="upd-hint">Телефон не сказал, какая у него оболочка, поэтому обновление без переустановки сейчас предложить не могу.</p>'
           : '') +
-        '<p class="upd-hint">Нужна переустановка приложения. После загрузки открой файл - Android предложит обновить, данные сохранятся.</p>' +
-        (can ? '<p class="upd-hint">Перед обновлением с переустановкой стоит на всякий случай сохранить бэкап данных в файл.</p>' : '')
+        '<p class="upd-hint">Нужна переустановка приложения. После загрузки откройте файл - Android предложит обновить, данные сохранятся.</p>' +
+        (can ? '<p class="upd-hint">Перед обновлением с переустановкой стоит на всякий случай сохранить копию данных в файл.</p>' : '')
       ),
       buttons: btns
     });
   }
 
-  // Сторовая сборка: обновление ставится только через RuStore. Никаких скачиваний.
+  // Сторовая сборка: RuStore нашёл версию новее. Ставит её сам RuStore своим окном.
   function dlgStore(d) {
+    var v = verOfCode(d.versionCode);
     UI.openDlg({
       title: 'Есть обновление',
       body: box(
-        '<p class="upd-h">Версия ' + UI.esc(d.version) + ' доступна в RuStore.</p>' +
-        notesHtml(d.notes) +
-        '<p class="upd-hint">Обновись через магазин - данные, кошельки и настройки останутся на месте.</p>'
+        '<p class="upd-h">' + (v ? 'Версия ' + UI.esc(v) + ' ждёт в RuStore.' : 'В RuStore есть новая версия.') + '</p>' +
+        '<p class="upd-hint">Обновление поставит RuStore. Данные, кошельки и настройки останутся на месте.</p>'
       ),
       buttons: [
-        { label: 'Закрыть', cls: 'ghost' },
-        { label: 'Открыть в RuStore', cls: 'primary', onClick: function () { UI.openExternal(URL_RUSTORE); } }
+        { label: 'Закрыть', cls: 'nav' },
+        { label: 'Обновить', cls: 'primary', onClick: function () {
+          var release = null;
+          try { if (window.AppLock && window.AppLock.away) release = window.AppLock.away(window.AppLock.AWAY_CALL); } catch (e) {}
+          // окно RuStore не открылось и в фон не ушли - отметку «своё окно» снимаем
+          startSdkUpdate({}, UI.openExternal).then(function () { if (typeof release === 'function') release(); });
+        } }
       ]
     });
   }
@@ -549,7 +703,7 @@
       title: 'Обновление',
       body: box('<p>' + UI.esc(msg) + '</p>'),
       buttons: [
-        { label: 'Закрыть', cls: 'ghost' },
+        { label: 'Закрыть', cls: 'nav' },
         { label: 'Повторить', cls: 'primary', onClick: function () { check(); return false; } }
       ]
     });
@@ -560,7 +714,7 @@
     UI.openDlg({
       title: 'Обновляю',
       body: box('<p class="upd-step" id="updStep">' + UI.esc(step) + '</p>' +
-                '<p class="upd-hint">Не закрывай приложение.</p>'),
+                '<p class="upd-hint">Не закрывайте приложение.</p>'),
       buttons: []
     });
   }
@@ -576,22 +730,27 @@
     if (busy) return Promise.resolve(null);
     busy = true;
     dlgWait();
+    if (isStore()) {
+      // стор: только RuStore App Update SDK, свой манифест не запрашиваем
+      return checkSdk(opts).then(function (d) {
+        busy = false;
+        if (d.kind !== 'error') { setNewerSdk(d); markChecked(); }
+        if (UI && UI.renderMenu) UI.renderMenu();
+        if (!waiting()) return d;
+        if (d.kind === 'store') dlgStore(d);
+        else if (d.kind === 'none') dlgFresh();
+        else dlgFail(d.message);
+        return d;
+      });
+    }
     // Сначала дожидаемся номера оболочки (до трёх секунд), потом решаем: сверять
     // minShell с выдуманным номером хуже, чем подождать.
     return waitShell().then(function () { return fetchManifest(opts); }).then(function (m) {
       busy = false;
-      if (isStore()) {
-        // стор: только номер оболочки и переход в RuStore; web/apkUrl не трогаем
-        var ds = decideStore(m, shellVer());
-        newerVer = (ds.kind === 'store') ? ds.version : '';
-        if (UI && UI.renderMenu) UI.renderMenu();
-        if (ds.kind === 'store') dlgStore(ds);
-        else dlgFresh();
-        return m;
-      }
       var d = decide(m, ver(), shellVer(), readFail());
       newerVer = (d.kind === 'ota' || d.kind === 'apk') ? d.version : '';
       if (UI && UI.renderMenu) UI.renderMenu();
+      if (!waiting()) return m;
       if (d.kind === 'ota') dlgOta(d);
       else if (d.kind === 'apk') dlgApk(d);
       else if (d.kind === 'skipped') dlgSkipped(d);
@@ -600,7 +759,7 @@
     }, function (e) {
       busy = false;
       newerVer = '';
-      dlgFail(e && e.message ? e.message : ERR_BAD);
+      if (waiting()) dlgFail(e && e.message ? e.message : ERR_BAD);
       return null;
     });
   }
@@ -610,14 +769,19 @@
   // ничего. Зовётся еженедельным таймером на старте (weeklyCheck).
   function silentCheck(opts) {
     if (busy) return Promise.resolve(null);
+    if (isStore()) {
+      // стор: RuStore App Update SDK. Ошибка (нет RuStore, нет сети) - молча, метку недели
+      // не двигаем: попробуем при следующем запуске. «Есть, но без номера» - тоже не двигаем.
+      return checkSdk(opts).then(function (d) {
+        if (d.kind === 'error') return null;
+        setNewerSdk(d);
+        if (UI && UI.renderMenu) UI.renderMenu();
+        return (d.kind === 'store' && !d.versionCode) ? null : d;
+      });
+    }
     return waitShell().then(function () { return fetchManifest(opts); }).then(function (m) {
-      if (isStore()) {
-        var ds = decideStore(m, shellVer());          // стор: только номер оболочки
-        newerVer = (ds.kind === 'store') ? ds.version : '';
-      } else {
-        var d = decide(m, ver(), shellVer(), readFail());
-        newerVer = (d.kind === 'ota' || d.kind === 'apk') ? d.version : '';
-      }
+      var d = decide(m, ver(), shellVer(), readFail());
+      newerVer = (d.kind === 'ota' || d.kind === 'apk') ? d.version : '';
       if (UI && UI.renderMenu) UI.renderMenu();
       return m;
     }, function () { return null; });
@@ -626,15 +790,16 @@
   // Раз в неделю (не при каждом запуске) тихо проверяем канал и, если есть обновление,
   // подсвечиваем иконку в меню. Метку времени храним локально; на неуспехе не сдвигаем —
   // значит при следующем запуске попробуем снова.
-  var WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   var K_CHECK = 'updCheckAt';
-  function weeklyCheck() {
-    var s = ls(); if (!s) return;
+  function markChecked() { var s = ls(); if (s) { try { s.setItem(K_CHECK, String(Date.now())); } catch (e) {} } }
+  function weeklyCheck(opts) {
+    var s = ls(); if (!s) return Promise.resolve(null);
     var last = 0;
     try { last = parseInt(s.getItem(K_CHECK), 10) || 0; } catch (e) {}
-    if (Date.now() - last < WEEK_MS) return;
-    silentCheck().then(function (m) {
-      if (m) { try { s.setItem(K_CHECK, String(Date.now())); } catch (e) {} }
+    if (!weekDue(last, Date.now())) return Promise.resolve(null);
+    return silentCheck(opts).then(function (m) {
+      if (m) markChecked();
+      return m;
     });
   }
 
@@ -914,6 +1079,15 @@
     }, function () {});
   }
 
+  // Стор: вся папка ota/ - лишняя. Нет её - ничего не делаем. Promise<true - удалили>.
+  function dropOta(F) {
+    if (!F || typeof F.readdir !== 'function' || typeof F.rmdir !== 'function') return Promise.resolve(false);
+    return Promise.resolve().then(function () { return F.readdir({ directory: 'DATA', path: 'ota' }); }).then(function (r) {
+      if (!r || !r.files || !r.files.length) return false;
+      return F.rmdir({ directory: 'DATA', path: 'ota', recursive: true }).then(function () { return true; }, function () { return false; });
+    }, function () { return false; });
+  }
+
   // Приложение дожило до живого экрана — значит эта сборка рабочая. Ставим печать,
   // снимаем метку попытки, заодно готовим заводскую копию и подметаем старое.
   function confirmBoot() {
@@ -926,6 +1100,11 @@
       } catch (e) {}
     }
 
+    // Стор-сборка код не подменяет (MainActivity забывает OTA-путь на старте): заводская
+    // копия ей не нужна, а files.json читать незачем - сеть веб-части стора закрыта CSP
+    // connect-src 'none'. Но папку ota/ (заводскую копию делала стор-сборка 1.0.2) убираем
+    // целиком: иначе мегабайты навсегда остаются в данных телефона (ревью 1.0.3).
+    if (isStore()) return dropOta(plugins() && plugins().Filesystem);
     var N = plugins();
     if (!N || !N.Filesystem || !N.WebView) return Promise.resolve(false);
     var F = N.Filesystem, W = N.WebView;
@@ -1039,12 +1218,16 @@
 
   return {
     cmpVer: cmpVer, isVer: isVer, parseManifest: parseManifest, parseWeb: parseWeb,
-    decide: decide, decideStore: decideStore, staleWww: staleWww, safeName: safeName, hex: hex, sameHash: sameHash, mbOf: mbOf,
+    decide: decide, decideSdk: decideSdk, verOfCode: verOfCode, codeOfVer: codeOfVer, stillNewer: stillNewer, weekDue: weekDue,
+    parseNewer: parseNewer, newerRecord: newerRecord, dropOta: dropOta, webUrl: webUrl,
+    checkSdk: checkSdk, startSdkUpdate: startSdkUpdate, weeklyCheck: weeklyCheck, staleWww: staleWww, safeName: safeName, hex: hex, sameHash: sameHash, mbOf: mbOf,
     failBlocks: failBlocks, zipTimeout: zipTimeout, buildOf: buildOf, normState: normState,
     fetchManifest: fetchManifest, fetchBundle: fetchBundle, unpack: unpack,
     apply: apply, confirmBoot: confirmBoot, sweep: sweep, readState: readState, writeState: writeState,
     check: check, silentCheck: silentCheck, open: open, mount: mount, newer: newer, resetConfirm: resetConfirm,
     shellVersion: shellVer, waitShell: waitShell, readFail: readFail, writeFail: writeFail,
+    MSG_NO_RUSTORE: MSG_NO_RUSTORE, MSG_SDK_FAIL: MSG_SDK_FAIL, K_NEWER: K_NEWER, K_CHECK: K_CHECK,
+    _sdk: function (p) { sdkOverride = p; }, _store: function (v) { storeOverride = v; },
     URL: URL_MANIFEST, URL_RUSTORE: URL_RUSTORE, HOST: HOST, MAX_ZIP: MAX_ZIP, MAX_RAW: MAX_RAW, MAX_FILE: MAX_FILE,
     STATE: STATE_PATH,
     KEY: { tryK: K_TRY, okK: K_OK, failK: K_FAIL },

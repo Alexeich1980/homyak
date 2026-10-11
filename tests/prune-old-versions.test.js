@@ -163,8 +163,14 @@ test('pruneOldVersions: нет папки - пустой список, не па
 // die() (любая осечка выходит раньше) и после записи артефактов. Нет скрипта - красный:
 // тихий return прятал бы переименование/удаление сборки.
 test('build-скрипты: уборка зовётся один раз, в самом конце, после всех die(); осечка печатает удалённое', () => {
-  // build-ota.js - внутренний скрипт, в публичный репозиторий не входит
-  ['build-apk.js', 'build-ota.js'].filter((n) => n === 'build-apk.js' || fs.existsSync(path.join(__dirname, '..', n))).forEach((name) => {
+  // build-ota.js с 1.0.3 - заглушка без кода сборки (веб-обновлений нет), уборки в ней нет
+  // (build-ota.js - внутренний скрипт, в публичный репозиторий не входит: его проверка только при наличии)
+  const otaPath = path.join(__dirname, '..', 'build-ota.js');
+  if (fs.existsSync(otaPath)) {
+    const ota = fs.readFileSync(otaPath, 'utf8');
+    assert.equal(ota.indexOf('pruneOldVersions'), -1, 'build-ota.js: в заглушке остался код уборки');
+  }
+  ['build-apk.js'].forEach((name) => {
     const p = path.join(__dirname, '..', name);
     assert.ok(fs.existsSync(p), name + ' не найден - заслон уборки проверять не на чем');
     const src = fs.readFileSync(p, 'utf8');

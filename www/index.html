@@ -2,6 +2,11 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<!-- CSP (1.0.3). Сеть веб-части: тест-сборка и превью - только свой сайт (манифест обновления
+     тест-сборки) и свои файлы; стор-сборка получает connect-src 'none' (build-lib.js shipCsp):
+     обновления там через RuStore App Update SDK, нативные плагины CSP не задевает.
+     'unsafe-inline' у script-src нужен вшитому тегу флагов сборки и мосту Capacitor. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob:; connect-src 'self' https://www.dorokhin-finance.ru; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="theme-color" content="#0F1F24">
 <title>Хомяк</title>
@@ -82,14 +87,14 @@
      не показывается; выключатель «Подсказки» в меню убирает её совсем. -->
 <div id="mainHint" hidden>
   <span class="mh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
-  <span class="mh-t">Нажми на кошелёк и, не отпуская, веди пальцем на категорию. Смахни подсказку, чтобы убрать.</span>
+  <span class="mh-t">Нажмите на кошелёк и, не отпуская, ведите пальцем на категорию. Смахните подсказку, чтобы убрать.</span>
 </div>
 
 <!-- Ситуативная подсказка режима правки: тот же фиксированный вид, что и у главной,
      но живёт только пока включён режим правки. Один раз, гасится свайпом. -->
 <div id="editHint" hidden>
   <span class="mh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
-  <span class="mh-t">Перетаскивай плитки - меняешь порядок. Тап по плитке - переименовать и сменить иконку. Закончить - галочка сверху.</span>
+  <span class="mh-t">Перетаскивайте плитки, чтобы поменять порядок. Тап по плитке - переименовать и сменить иконку. Закончить - галочка сверху.</span>
 </div>
 
 <!-- Явная запись операции: кнопка-«плюс» на главном экране. Drag (поднял плитку и
@@ -115,14 +120,14 @@
 
   <div class="am-num">
     <div id="amMini" class="am-mini"></div>
-    <div id="amExpr" class="am-expr">0 ₽</div>
+    <div id="amExpr" class="am-expr">0&nbsp;₽</div>
   </div>
 
   <!-- Ситуативная подсказка экрана суммы: один раз, гасится свайпом, подчиняется
        общему выключателю «Подсказки». -->
   <div id="amHint" class="am-hint" hidden>
     <span class="mh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
-    <span class="mh-t">Сумму можно посчитать прямо тут: 150+300. Дату смени внизу. Затем - Подтвердить.</span>
+    <span class="mh-t">Сумму можно посчитать прямо тут: 150+300. Дату можно сменить внизу. Затем - Подтвердить.</span>
   </div>
 
   <div class="am-confirm-wrap">
@@ -193,7 +198,7 @@
   <div class="card-list" id="cardList"></div>
   <div class="sh-hint" id="cardHint">
     <span class="sh-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
-    <span class="sh-ht">Потяни строку влево - удалить, вправо - править.</span>
+    <span class="sh-ht">Потяните строку влево - удалить, вправо - править.</span>
   </div>
 </div>
 
@@ -323,9 +328,9 @@
       <span>Очистить демо-данные</span>
     </button>
 
-    <!-- Порядок плиток задан хозяином, ровной сеткой по два: связь и вид, обновление
-         и кошельки, звук и вибрация, подсказки и «О приложении», бэкап и восстановление.
-         Пустых половинок и плиток во всю ширину нет. Карточки-статуса тут больше нет:
+    <!-- Порядок плиток задан хозяином (05.10), ровной сеткой по два: тема и обновление,
+         категории и кошельки, «Звук и подсказки» и «Копия данных», «Защита входа» и
+         «О приложении». Пустых половинок и плиток во всю ширину нет. Карточки-статуса тут больше нет:
          счётчик неотправленных живёт значком на плитке синхронизации, «есть обновление»
          - точкой на своей. -->
     <div class="menu-list">
@@ -343,26 +348,24 @@
       <button class="mi c-yellow" id="mWallets" type="button">
         <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h13a1 1 0 0 1 1 1v3"/><path d="M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-4"/><rect x="14" y="11" width="7" height="5" rx="1"/><circle cx="17" cy="13.5" r="0.7" fill="currentColor" stroke="none"/></svg></span><span class="mi-t">Настроить кошельки</span><span class="mi-s" id="mWalletsInfo"></span>
       </button>
-      <button class="mi c-pink" id="mSound" type="button">
-        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z"/><path d="M15.6 9.6a3.4 3.4 0 0 1 0 4.8"/><path d="M18.2 7a7 7 0 0 1 0 10"/></svg></span><span class="mi-sw" id="mSoundSw" aria-hidden="true"><i></i></span>
-        <span class="mi-t">Звук</span><span class="mi-s" id="mSoundInfo">вкл</span>
+      <!-- 1.0.3 (решение Алексея 05.10): звук, вибрация и подсказки собраны в одну плитку,
+           сохранение, восстановление и напоминание о копии - во вторую. Тумблеры и кнопки
+           живут в подменю (окно #dlg поверх меню, openPrefs/openCopy). -->
+      <button class="mi c-pink" id="mPrefs" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z"/><path d="M15.6 9.6a3.4 3.4 0 0 1 0 4.8"/><path d="M18.2 7a7 7 0 0 1 0 10"/></svg></span>
+        <span class="mi-t">Звук и подсказки</span><span class="mi-s" id="mPrefsInfo">всё вкл</span>
       </button>
-      <button class="mi c-coral" id="mHaptic" type="button">
-        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="3" width="7" height="18" rx="2.2"/><path d="M10.8 6h2.4"/><path d="M5 9.5v5M19 9.5v5"/><path d="M2.2 11v2M21.8 11v2"/></svg></span><span class="mi-sw" id="mHapticSw" aria-hidden="true"><i></i></span>
-        <span class="mi-t">Вибрация</span><span class="mi-s" id="mHapticInfo">вкл</span>
+      <button class="mi c-green" id="mCopy" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4h9L20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 5 18.5z"/><path d="M8.5 4v5h6V4"/><path d="M8 20v-6h8v6"/></svg></span>
+        <span class="mi-t">Копия данных</span><span class="mi-s" id="mCopyInfo">сохранить, восстановить</span>
       </button>
-      <button class="mi c-teal" id="mHints" type="button">
-        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 18h5"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1-.9 1.7v.5h-5.4v-.5c0-.7-.3-1.2-.9-1.7A6 6 0 0 1 12 3z"/></svg></span><span class="mi-sw" id="mHintsSw" aria-hidden="true"><i></i></span>
-        <span class="mi-t">Подсказки</span><span class="mi-s" id="mHintsInfo">вкл</span>
+      <!-- 1.0.3: замок на вход (lock.js) -->
+      <button class="mi c-purple" id="mLock" type="button">
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10.5" width="14" height="9.5" rx="2.2"/><path d="M8 10.5V7.8a4 4 0 0 1 8 0v2.7"/><circle cx="12" cy="15.2" r="1.2" fill="currentColor" stroke="none"/></svg></span>
+        <span class="mi-t">Защита входа</span><span class="mi-s" id="mLockInfo">выкл</span>
       </button>
       <button class="mi c-grey" id="mAbout" type="button">
-        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8"/><path d="M12 11.2v5.4"/><circle cx="12" cy="7.8" r="1.05" fill="currentColor" stroke="none"/></svg></span><span class="mi-t">О приложении</span><span class="mi-s">Как пользоваться, автор</span>
-      </button>
-      <button class="mi c-green" id="mBackup" type="button">
-        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4h9L20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 5 18.5z"/><path d="M8.5 4v5h6V4"/><path d="M8 20v-6h8v6"/></svg></span><span class="mi-t">Бэкап в файл</span><span class="mi-s">сохранить данные</span>
-      </button>
-      <button class="mi c-grey" id="mRestore" type="button">
-        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5v5h5"/><path d="M4.9 10.2A8 8 0 1 1 4.2 14"/><path d="M12 8v4.4l3 1.8"/></svg></span><span class="mi-t">Восстановить из файла</span><span class="mi-s">из копии</span>
+        <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8"/><path d="M12 11.2v5.4"/><circle cx="12" cy="7.8" r="1.05" fill="currentColor" stroke="none"/></svg></span><span class="mi-t">О приложении</span><span class="mi-s">помощь и автор</span>
       </button>
     </div>
 
@@ -372,18 +375,20 @@
 
 <!-- приветственный онбординг при первом запуске (логика — maybeOnboard) -->
 <div id="onboard" hidden role="dialog" aria-modal="true" aria-label="Знакомство с приложением">
-  <div class="ob-hint ob-menu"><b>↖ Меню</b><span>кошельки, категории, темы, обновление</span></div>
-  <div class="ob-hint ob-an"><b>Аналитика ↗</b><span>сводка, лента, графики</span></div>
+  <div class="ob-hints">
+    <div class="ob-hint ob-menu"><b>↖ Меню</b><span>кошельки, категории, темы, обновление</span></div>
+    <div class="ob-hint ob-an"><b>Аналитика ↗</b><span>сводка, лента, графики</span></div>
+  </div>
   <div class="ob-card">
     <span class="ob-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
     <div class="ob-t">Добро пожаловать в «Хомяк»!</div>
-    <div class="ob-p">Операции записываются <b>перетаскиванием плиток</b>. Нажми на плитку и, не отпуская, веди пальцем:</div>
+    <div class="ob-p">Операции записываются <b>перетаскиванием плиток</b>. Нажмите на плитку и, не отпуская, ведите пальцем:</div>
     <ul class="ob-list">
       <li>кошелёк → на категорию расхода - это расход</li>
       <li>источник дохода (зарплата, аванс) → на кошелёк - это доход</li>
       <li>кошелёк → на кошелёк - перевод</li>
     </ul>
-    <div class="ob-p ob-first">Начни с главного: задай баланс кошельков (тап по кошельку) и, если хочешь, месячные лимиты категорий.</div>
+    <div class="ob-p ob-first">Сначала задайте баланс кошельков (тап по кошельку) и, по желанию, лимиты категорий на месяц.</div>
     <div class="ob-p ob-dim">Кошельки, категории и лимиты настраиваются в меню - хомяк сверху слева. Аналитика - кнопка справа.</div>
     <button id="obDone" class="btn primary ob-btn" type="button">Понятно, начать</button>
   </div>
@@ -421,6 +426,36 @@
   <button id="toastBtn" class="tbtn" type="button" hidden></button>
 </div>
 
+<!-- Напоминание «сохрани копию данных» (nudges.js): не чаще раза в месяц, спокойная
+     карточка внизу, пока хозяин не выберет. -->
+<div id="remind" hidden role="status">
+  <div class="rm-t">Сохраните копию данных</div>
+  <div class="rm-p">Все записи хранятся только на этом телефоне. Копия в файле спасёт их, если телефон потеряется или сломается.</div>
+  <div class="rm-btns">
+    <button id="remindLater" class="btn nav" type="button">Позже</button>
+    <button id="remindSave" class="btn primary" type="button">Сохранить копию</button>
+  </div>
+</div>
+
+<!-- Экран «Защита входа» (lock.js). Закрывает всё приложение: при запуске, после фона
+     дольше минуты. Класс cover - шторка без клавиатуры на время фона. Это замок от
+     посторонних глаз, данные он не шифрует. -->
+<div id="lock" hidden role="dialog" aria-modal="true" aria-labelledby="lockTitle">
+  <div class="lk-box">
+    <span class="lk-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>
+    <div class="lk-t" id="lockTitle">Введите код</div>
+    <div class="lk-dots" id="lockDots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <div class="lk-msg" id="lockMsg" role="status"></div>
+    <div class="lk-pad" id="lockPad"></div>
+    <button class="lk-link info-row" id="lockForgot" type="button"><i class="i-ico" aria-hidden="true"></i>Забыли код?</button>
+  </div>
+  <div class="lk-sheet" id="lockSheet" hidden>
+    <div class="lk-sh-t" id="lockSheetT"></div>
+    <div class="lk-sh-p" id="lockSheetP"></div>
+    <div class="lk-sh-btns" id="lockSheetBtns"></div>
+  </div>
+</div>
+
 <script src="version.js"></script>
 <script src="capacitor.js"></script>
 <script src="boot.js"></script>
@@ -428,6 +463,8 @@
 <script src="engine.js"></script>
 <script src="seed.js"></script>
 <script src="access.js"></script>
+<script src="guards.js"></script>
+<script src="lock.js"></script>
 <script src="license.js"></script>
 <script src="pay-config.js"></script>
 <script src="pay.js"></script>
@@ -440,6 +477,7 @@
 <script src="purchase.js"></script>
 <script src="anim.js"></script>
 <script src="backup.js"></script>
+<script src="nudges.js"></script>
 <script src="update.js"></script>
 <script src="selftest.js"></script>
 </body>

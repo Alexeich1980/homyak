@@ -33,7 +33,19 @@
       // покупка «Полного доступа» через RuStore Pay SDK и восстановление покупки.
       // На девайсе с боевым console_app_id — реальная оплата; с заглушкой отвечает
       // «не сконфигурировано»; в браузере/деве pay.js уходит на MockPayment.
-      RuStorePay: C.registerPlugin('RuStorePay')
+      RuStorePay: C.registerPlugin('RuStorePay'),
+      // RuStoreReview - свой плагин оболочки (android/.../RuStoreReviewPlugin.java): окно
+      // оценки RuStore Review SDK. Когда звать, решают guards.js + nudges.js.
+      RuStoreReview: C.registerPlugin('RuStoreReview'),
+      // RuStoreUpdate - свой плагин оболочки (android/.../RuStoreUpdatePlugin.java, 1.0.3):
+      // проверка и установка обновления через RuStore App Update SDK. Зовёт только
+      // стор-сборка (update.js).
+      RuStoreUpdate: C.registerPlugin('RuStoreUpdate'),
+      // NativeBiometric (capacitor-native-biometric 4.2.2, как в «Сейфе»): вход по отпечатку
+      // для «Кода на вход» (lock.js). Только проверка пальца, ключей мы в нём не храним.
+      NativeBiometric: C.registerPlugin('NativeBiometric'),
+      // AppPrivacy - свой плагин оболочки: прячет миниатюру в «недавних», пока включён замок.
+      AppPrivacy: C.registerPlugin('AppPrivacy')
     };
   } catch (e) {
     window.NativePlugins = null;

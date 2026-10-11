@@ -19,13 +19,13 @@
  *   2. собирает чистую копию www/ БЕЗ отладочных файлов и переносит её в Android-проект
  *      (npx cap sync android). Сами selftest.js/icons.html/preview.html из www/ никуда
  *      не деваются - это рабочие инструменты QA, они просто не едут в APK;
- *   3. android\gradlew.bat assembleRelease с ключом из keys/ (если ключа нет -
- *      откат на assembleDebug с громким предупреждением);
+ *   3. android\gradlew.bat assembleRelease с ключом из keys/. Стор/релиз без ключа -
+ *      отказ ДО сборки (build-lib signingPlan); тест-сборка без ключа - assembleDebug
+ *      с громким предупреждением;
  *   4. копирует готовый APK в out/<test|store>/homyak-<версия>.apk (и Homyak.apk /
- *      Homyak-store.apk туда же и на рабочий стол), кладёт рядом веб-архив
- *      www-<версия>.zip (та же чистая копия www, из которой собран APK) и пишет
- *      update.json - манифест канала обновления с ДВУМЯ разделами: apk (переустановка)
- *      и web (бесшовное обновление). publish-update.py читает только out/store/.
+ *      Homyak-store.apk туда же и на рабочий стол) и пишет update.json. Стор: в манифесте
+ *      только номер версии, веб-архива нет. Тест: ещё веб-архив www-<версия>.zip и раздел
+ *      web. publish-update.py читает только out/store/.
  *
  * Любая осечка - понятное сообщение по-русски и код возврата 1.
  */
@@ -52,6 +52,18 @@ const on = (v) => !!v && v !== '0' && v !== 'false' && v !== '';
 const REEL = process.argv.slice(2).indexOf('--reel') >= 0 || on(process.env.HOMYAK_REEL);
 try { L.checkModeConflict(MODE, REEL); } catch (e) { die(e.message); }
 try { L.checkDistribution(MODE); } catch (e) { die(e.message); }
+// Ключ подписи проверяем сразу, до self-test и cap sync: стор/релиз без своего ключа - отказ.
+const KEY_PROPS = path.join(ROOT, 'keys', 'homyak.properties');
+const KEY_STORE = path.join(ROOT, 'keys', 'homyak.jks');
+const hasKey = fs.existsSync(KEY_PROPS) && fs.existsSync(KEY_STORE);
+let SIGN;
+try { SIGN = L.signingPlan(MODE, hasKey); } catch (e) { die(e.message); }
+// Версия стор-сборки - строго новее опубликованной, не откат собранной (build-lib
+// checkVersionGate). Тоже до self-test и Gradle: 1.0.3 чуть не собрали с 1.0.2.
+try {
+  L.checkVersionGate(Object.assign({ store: !!MODE.store && !REEL, version: L.readVersion(path.join(ROOT, 'package.json')) },
+    L.storeHistory(path.join(ROOT, 'out', 'store'), path.join(ROOT, 'android', 'app', 'build.gradle'))));
+} catch (e) { die(e.message); }
 
 // --- console_app_id RuStore: одно значение в двух местах -------------------------------
 const PAY_CONFIG = path.join(ROOT, 'www', 'pay-config.js');
@@ -92,16 +104,13 @@ function candidateBanner() {
 const MIN_SHELL = '0.1.0';
 const WWW = path.join(ROOT, 'www');
 const WWW_SHIP = path.join(ROOT, 'build', 'www-ship');   // чистая копия под APK
-const KEYS = path.join(ROOT, 'keys');
-const KEY_PROPS = path.join(KEYS, 'homyak.properties');
-const KEY_STORE = path.join(KEYS, 'homyak.jks');
 const CAP_CFG = path.join(ROOT, 'capacitor.config.json');
 const PKG = path.join(ROOT, 'package.json');
 const GRADLE = path.join(ANDROID, 'app', 'build.gradle');
 const CHANGELOG = path.join(ROOT, 'CHANGELOG.md');
 const UPDATE_JSON = path.join(OUT_DIR, 'update.json');
 const LAST_APK = path.join(OUT_DIR, 'last-apk.json');
-const UPDATE_BASE = 'https://dorokhin-finance.ru/homyak-store/';
+const UPDATE_BASE = 'https://www.dorokhin-finance.ru/homyak-store/';
 
 // Список отладочных файлов, чистая копия www, опись files.json и zip - в build-lib.js:
 // тем же кодом пользуется build-ota.js, иначе архив и APK разъехались бы по составу.
@@ -300,18 +309,18 @@ if (!r.ok) die('не прошёл "npx cap sync android" (' + r.why + ').');
 // Релизная подпись своим ключом. На debug-ключе APK получается отлаживаемым (любой
 // подключённый по USB компьютер читает базу целиком), а сам ключ общеизвестен и
 // протухает - после этого обновление поверх невозможно, только удаление с потерей данных.
-const hasKey = fs.existsSync(KEY_PROPS) && fs.existsSync(KEY_STORE);
-const task = hasKey ? 'assembleRelease' : 'assembleDebug';
-const APK_SRC = hasKey
+// Стор/релиз без ключа сюда не доходит (signingPlan выше); debug - только тест-сборка.
+const task = SIGN.task;
+const APK_SRC = !SIGN.debug
   ? path.join(ANDROID, 'app', 'build', 'outputs', 'apk', 'release', 'app-release.apk')
   : path.join(ANDROID, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
 
-if (hasKey) {
+if (!SIGN.debug) {
   say('\nПодпись: свой ключ keys/homyak.jks (релизная сборка).');
 } else {
   console.warn(
     '\n!!! ВНИМАНИЕ: ключа подписи нет (' + KEY_PROPS + ').\n' +
-    '!!! Собираю ОТЛАДОЧНЫЙ APK на общеизвестном debug-ключе.\n' +
+    '!!! ТЕСТ-СБОРКА на общеизвестном debug-ключе (стор/релиз без ключа не собирается).\n' +
     '!!! Такой APK читается с компа по USB целиком, и обновить его поверх релизным\n' +
     '!!! потом не выйдет - только удаление приложения вместе со всеми данными.\n' +
     '!!! Восстанови keys/ из своей копии, см. keys/README.txt.\n'
@@ -375,35 +384,28 @@ try {
 
 const size = fs.statSync(OUT_APK_VER).size;
 
-// --- 5. веб-архив: то же самое www, но для бесшовного обновления ---------------
-// Тот же WWW_SHIP, из которого собран APK: в архиве и в оболочке лежит один и тот же
-// набор файлов, разъехаться им негде.
-const zipBuf = L.zipShip(WWW_SHIP);
-const ZIP_NAME = 'www-' + VER.version + '.zip';
-fs.writeFileSync(path.join(OUT_DIR, ZIP_NAME), zipBuf);
-const zipSha = L.sha256hex(zipBuf);
+// --- 5. веб-архив и манифест канала ------------------------------------------------
+// Стор (1.0.3): веб-архива нет и раздела web в манифесте нет - код в RuStore меняет только
+// RuStore (build-lib shipsWebZip/channelManifest). Тест-сборка: тот же WWW_SHIP, из которого
+// собран APK, едет и в архив - разъехаться им негде.
+let zipBuf = null, zipSha = '', ZIP_NAME = '';
+if (L.shipsWebZip(MODE)) {
+  zipBuf = L.zipShip(WWW_SHIP);
+  ZIP_NAME = 'www-' + VER.version + '.zip';
+  fs.writeFileSync(path.join(OUT_DIR, ZIP_NAME), zipBuf);
+  zipSha = L.sha256hex(zipBuf);
+}
 
-// манифест канала обновления. Публикуется отдельно и вручную:
-//   python publish-update.py
-// Верхние поля - как были: их читает уже установленная 0.2.2, которая про «web»
-// ничего не знает. Раздел web - бесшовное обновление; minShell - минимальная версия
-// оболочки, на которой эта веб-сборка вообще заведётся.
-fs.writeFileSync(UPDATE_JSON, JSON.stringify({
-  // build: тип сборки; publish-update.py публикует только 'release' | 'store'.
-  // Приложение это поле не читает (parseManifest берёт только известные поля).
-  build: MODE.store ? 'store' : (MODE.release ? 'release' : 'test'),
+// манифест канала. Публикуется отдельно и вручную (python publish-update.py) и нужен только
+// установленным 1.0.2 и старше: с 1.0.3 стор-приложение спрашивает RuStore само.
+fs.writeFileSync(UPDATE_JSON, JSON.stringify(L.channelManifest({
+  mode: MODE,
   version: VER.version,
   apkUrl: UPDATE_BASE + APK_NAME,
   size: size,
   notes: topNotes(),
-  web: {
-    version: VER.version,
-    url: UPDATE_BASE + ZIP_NAME,
-    sha256: zipSha,
-    size: zipBuf.length,
-    minShell: MIN_SHELL
-  }
-}, null, 2) + '\n', 'utf8');
+  web: zipBuf ? { url: UPDATE_BASE + ZIP_NAME, sha256: zipSha, size: zipBuf.length, minShell: MIN_SHELL } : null
+}), null, 2) + '\n', 'utf8');
 
 // След последней сборки оболочки: из него build-ota.js берёт apk-поля манифеста,
 // когда выкладывает одну веб-сборку без пересборки APK.
@@ -419,8 +421,8 @@ say('\nГотово. APK ' + mb(size));
 say('  ' + OUT_APK_VER);
 say('  ' + OUT_APK);
 if (desktopOk) say('  ' + DESKTOP_APK);
-say('  ' + path.join(OUT_DIR, ZIP_NAME) + '  (веб-архив ' + mb(zipBuf.length) + ', sha256 ' + zipSha.slice(0, 12) + '…)');
-say('  ' + UPDATE_JSON + '  (манифест обновления: apk + web)');
+if (zipBuf) say('  ' + path.join(OUT_DIR, ZIP_NAME) + '  (веб-архив ' + mb(zipBuf.length) + ', sha256 ' + zipSha.slice(0, 12) + '…)');
+say('  ' + UPDATE_JSON + '  (манифест: ' + (zipBuf ? 'apk + web' : 'только номер версии') + ')');
 if (REEL) {
   console.warn('\n=== REEL-СБОРКА для промо-скринкастов: полный доступ + reel-персоны. НЕ отдавать клиентам и не публиковать ===');
   say('Переключатель персон: long-press по шапке приложения → лист «Демо-ролик».');
@@ -430,7 +432,8 @@ if (REEL) {
   say('\nДальше: ' + (MODE.store
     ? 'APK со стола - в Консоль RuStore. Прямой раздачи нет: только через RuStore.'
     : 'перешли файл клиенту, открыть на телефоне, «Установить».'));
-  say('После одобрения и публикации в RuStore: python publish-update.py <версия> (только номер версии на канал)');
+  say('После одобрения и публикации в RuStore: python publish-update.py <версия> - номер на канал нужен только\n' +
+      'установленным 1.0.2 и старше; 1.0.3+ спрашивает RuStore сама (App Update SDK).');
 } else {
   console.warn('\n=== ТЕСТ-СБОРКА: демо-данные + полный доступ. НЕ отдавать клиентам и не публиковать ===');
   say('publish-update.py папку out/test/ не видит - опубликовать её случайно нельзя.');

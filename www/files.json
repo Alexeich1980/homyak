@@ -1,5 +1,5 @@
 {
-  "version": "1.0.2",
+  "version": "1.0.3",
   "files": [
     "access.js",
     "anim.js",
@@ -27,6 +27,7 @@
     "fonts/nunito-sans-latin-ext-600.woff2",
     "fonts/nunito-sans-latin-ext-700.woff2",
     "fonts/nunito-sans-latin-ext-800.woff2",
+    "guards.js",
     "hamster.png",
     "icons-color/baby.png",
     "icons-color/bag.png",
@@ -80,7 +81,9 @@
     "icons.js",
     "index.html",
     "license.js",
+    "lock.js",
     "native.js",
+    "nudges.js",
     "pay-config.js",
     "pay.js",
     "purchase.js",

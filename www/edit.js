@@ -452,10 +452,10 @@ function editWallet(id, backToList) {
         '<button class="btn danger" type="button" id="ecDel">Удалить</button>' +
       '</div>',
     buttons: [
-      { label: 'Отмена', cls: 'ghost', onClick: function () { if (backToList) { openWallets(); return false; } } },
+      { label: 'Отмена', cls: 'nav', onClick: function () { if (backToList) { openWallets(); return false; } } },
       { label: 'Сохранить', cls: 'primary', onClick: function () {
         var name = String($('ecName').value).trim();
-        if (!name) { showErr('ecErr', 'Впиши название'); return false; }
+        if (!name) { showErr('ecErr', 'Впишите название'); return false; }
         var n = num($('ecBase').value);
         if (isNaN(n)) { showErr('ecErr', 'Баланс - это число'); return false; }
         Engine.updateWallet(UI.S, id, { name: name, icon: f.icon, color: f.color });
@@ -512,7 +512,7 @@ function deleteWalletFlow(id, backToList) {
   var text = n
     ? 'У кошелька «' + w.name + '» ' + n + ' ' + Engine.plural(n, 'операция', 'операции', 'операций') +
       '. Удалить кошелёк вместе с операциями? Они сотрутся насовсем. ' +
-      'Хочешь сохранить историю - нажми «Скрыть».'
+      'Хотите сохранить историю - нажмите «Скрыть».'
     : 'Удалить кошелёк «' + w.name + '»?';
   UI.dlgConfirm({
     title: 'Удалить кошелёк?',
@@ -541,7 +541,7 @@ function full() {
 }
 // подключена ли оплата (Access.PAY, access.js). Без неё баннер честно говорит «позже».
 function payOn() { return !!(typeof Access !== 'undefined' && Access.PAY); }
-var FULL_PRICE = '990 ₽';
+var FULL_PRICE = '990\u00a0₽';
 // Стартовая цена действует до этой даты (включительно). После неё строка про срок
 // гаснет сама - даже в сборке, которую не обновили, устаревшее обещание не покажется.
 // Саму цену после подключения RuStore Pay брать из магазина (getProducts), не отсюда.
@@ -597,7 +597,7 @@ function paywall(back) {
           '</div>'
         : '') +
     '</div>';
-  var buttons = [{ label: 'Позже', cls: pay ? 'ghost' : 'primary', onClick: function () { if (ret) { ret(); return false; } } }];
+  var buttons = [{ label: 'Позже', cls: 'nav', onClick: function () { if (ret) { ret(); return false; } } }];
   if (pay) buttons.push({ label: 'Купить в RuStore - ' + FULL_PRICE, cls: 'primary', onClick: function () {
     if (window.UI.buyFullAccess) { window.UI.buyFullAccess(ret); return false; }
   } });
@@ -653,7 +653,7 @@ function bindActivate(ret) {
   }
   btn.addEventListener('click', function () {
     var raw = String(input.value || '').trim();
-    if (!raw) { showMsg('Вставь лицензионный ключ.', true); input.focus(); return; }
+    if (!raw) { showMsg('Вставьте лицензионный ключ.', true); input.focus(); return; }
     if (!window.License || !window.License.activate) {
       showMsg('Проверка ключа недоступна в этой сборке.', true); return;
     }
@@ -666,13 +666,13 @@ function bindActivate(ret) {
         // dlgAlert открывается в том же #dlg: заменяет пейволл своим содержимым и
         // сбрасывает его onClose (ret не сработает). Закрыл подтверждение - главный экран
         // уже без лимитов.
-        UI.dlgAlert('Полный доступ открыт. Спасибо, что поддержал разработку!', 'Готово');
+        UI.dlgAlert('Полный доступ открыт. Спасибо, что поддержали разработку!', 'Готово');
         return;
       }
       btn.disabled = false; input.disabled = false;
       var why = (r && r.reason === 'no-webcrypto')
-        ? 'Проверка ключа недоступна на этом устройстве. Обнови приложение.'
-        : 'Ключ недействителен. Проверь, что вставил его целиком и без изменений.';
+        ? 'Проверка ключа недоступна на этом устройстве. Обновите приложение.'
+        : 'Ключ недействителен. Проверьте, что он вставлен целиком и без изменений.';
       showMsg(why, true);
     });
   });
@@ -715,11 +715,11 @@ function catForm(pfx, o, kind) {
       ? '<div class="ef"><span class="lbl">Лимит в месяц, ₽</span>' +
         '<input class="inp" id="' + pfx + 'Lim" type="text" inputmode="decimal" placeholder="не задан"' +
         (o.limValue != null ? ' value="' + esc(o.limValue) + '"' : '') + '>' +
-        '<div class="hint">Оставишь пустым - лимита нет: приложение просто считает траты. С лимитом кружок категории на главном показывает, сколько осталось, и краснеет при перерасходе.</div></div>'
+        '<div class="hint">Если оставить пустым, лимита нет: приложение просто считает траты. С лимитом кружок категории на главном показывает, сколько осталось, и краснеет при перерасходе.</div></div>'
       : '<div class="ef"><span class="lbl">План на месяц, ₽</span>' +
         '<input class="inp" id="' + pfx + 'Lim" type="text" inputmode="decimal" placeholder="не задан"' +
         (o.limValue != null ? ' value="' + esc(o.limValue) + '"' : '') + '>' +
-        '<div class="hint">Оставишь пустым - плана нет: приложение просто считает доход. С планом кружок источника на главном показывает, сколько осталось до цели, и зеленеет при достижении.</div></div>');
+        '<div class="hint">Если оставить пустым, плана нет: приложение просто считает доход. С планом кружок источника на главном показывает, сколько осталось до цели, и зеленеет при достижении.</div></div>');
   st.bind = function () {
     var prev = $(pfx + 'Ico'), nameEl = $(pfx + 'Name');
     function paintIco() { prev.innerHTML = Icons.img(st.icon, kind, 26); }
@@ -756,10 +756,10 @@ function editCat(kind, id, backToList) {
       '<div class="ef-acts"><button class="btn danger" type="button" id="ecatArch">' +
         (kind === 'inc' ? 'Убрать источник в архив' : 'Убрать категорию в архив') + '</button></div>',
     buttons: [
-      { label: 'Отмена', cls: 'ghost', onClick: function () { if (backToList) { openCats(kind); return false; } } },
+      { label: 'Отмена', cls: 'nav', onClick: function () { if (backToList) { openCats(kind); return false; } } },
       { label: 'Сохранить', cls: 'primary', onClick: function () {
         var name = String($('ecatName').value).trim();
-        if (!name) { showErr('ecatErr', 'Впиши название'); return false; }
+        if (!name) { showErr('ecatErr', 'Впишите название'); return false; }
         var l = readLimit('ecat');
         if (l !== null && (isNaN(l) || l < 0)) {
           showErr('ecatErr', (kind === 'inc' ? 'План' : 'Лимит') + ' - неотрицательное число'); return false;
@@ -803,10 +803,10 @@ function addCat(kind, backToList) {
   UI.openDlg({
     title: kind === 'inc' ? 'Новый источник дохода' : 'Новая категория', body: f.body,
     buttons: [
-      { label: 'Отмена', cls: 'ghost', onClick: function () { if (backToList) { openCats(kind); return false; } } },
+      { label: 'Отмена', cls: 'nav', onClick: function () { if (backToList) { openCats(kind); return false; } } },
       { label: 'Добавить', cls: 'primary', onClick: function () {
         var name = String($('acatName').value).trim();
-        if (!name) { showErr('acatErr', 'Впиши название'); return false; }
+        if (!name) { showErr('acatErr', 'Впишите название'); return false; }
         if (!catGate(kind, backToList)) return false;
         var l = readLimit('acat');
         if (l !== null && (isNaN(l) || l < 0)) {
@@ -829,7 +829,7 @@ function catRowHtml(c, kind) {
   var ym = UI.curYM();
   var lim = Engine.catLimit(UI.S, c.id, ym);
   var noneWord = kind === 'inc' ? 'без плана' : 'без лимита';
-  var right = '<span class="clr-lim">' + (lim == null ? noneWord : Engine.fmt(lim) + ' ₽') + '</span>';
+  var right = '<span class="clr-lim">' + (lim == null ? noneWord : Engine.fmt(lim) + '\u00a0₽') + '</span>';
   return '<button class="clrow" type="button" data-id="' + esc(c.id) + '">' +
     '<span class="clr-ic" aria-hidden="true">' + Icons.img(UI.S.icons[c.id] || c.icon, kind, 24, c.name) + '</span>' +
     '<span class="clr-n">' + esc(c.name) + '</span>' + right + '</button>';
@@ -878,8 +878,8 @@ function openCats(kind) {
   UI.openDlg({
     title: '', body: body,
     hint: { key: 'cats', text: k === 'inc'
-      ? 'Задай план на месяц - и кружок источника покажет, сколько осталось до цели.'
-      : 'Задай месячный лимит категории - и кружок начнёт показывать траты к лимиту.' },
+      ? 'Задайте план на месяц - и кружок источника покажет, сколько осталось до цели.'
+      : 'Задайте месячный лимит категории - и кружок начнёт показывать траты к лимиту.' },
     buttons: [{ label: 'Готово', cls: 'primary' }],
     onOpen: function () {
       $('dlg').classList.add('dlg-swipe');
@@ -936,10 +936,10 @@ function addWallet(backToList) {
   UI.openDlg({
     title: 'Новый кошелёк', body: f.body,
     buttons: [
-      { label: 'Отмена', cls: 'ghost', onClick: function () { if (backToList) { openWallets(); return false; } } },
+      { label: 'Отмена', cls: 'nav', onClick: function () { if (backToList) { openWallets(); return false; } } },
       { label: 'Добавить', cls: 'primary', onClick: function () {
         var name = String($('awName').value).trim();
-        if (!name) { showErr('awErr', 'Впиши название'); return false; }
+        if (!name) { showErr('awErr', 'Впишите название'); return false; }
         var raw = String($('awBase').value).trim();
         var n = raw === '' ? 0 : num(raw);
         if (isNaN(n)) { showErr('awErr', 'Баланс - это число'); return false; }
@@ -1022,7 +1022,7 @@ function pickMonth(year) {
     }).join('') + '</div>';
   UI.openDlg({
     title: 'Месяц', body: body,
-    buttons: [{ label: 'Закрыть', cls: 'ghost' }],
+    buttons: [{ label: 'Закрыть', cls: 'nav' }],
     onOpen: function () {
       all($('dlgBody'), '.chip[data-ym]').forEach(function (el) {
         el.addEventListener('click', function () {

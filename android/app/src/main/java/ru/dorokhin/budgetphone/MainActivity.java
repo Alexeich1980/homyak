@@ -25,6 +25,12 @@ public class MainActivity extends BridgeActivity {
         // при создании, и всё, что записано позже, он уже не увидит.
         registerPlugin(SaveFilePlugin.class);
         registerPlugin(RuStorePayPlugin.class);
+        // Окно оценки RuStore (Review SDK) и шторка «недавних» для «Кода на вход» (1.0.3).
+        registerPlugin(RuStoreReviewPlugin.class);
+        registerPlugin(AppPrivacyPlugin.class);
+        // Проверка обновления через RuStore App Update SDK (1.0.3, как в «Карте года»): зовёт
+        // только стор-сборка, свой манифест на CDN она больше не читает.
+        registerPlugin(RuStoreUpdatePlugin.class);
         super.onCreate(savedInstanceState);
 
         // Своя типографика: системный «размер шрифта» Android иначе растягивает подписи

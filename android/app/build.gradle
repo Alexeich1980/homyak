@@ -19,8 +19,8 @@ android {
         applicationId "ru.dorokhin.homyak"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20005
-        versionName "1.0.2"
+        versionCode 20007
+        versionName "1.0.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Стор-сборка (build-apk.js --store передаёт -PhomyakStore=true): MainActivity на старте
         // забывает путь к скачанной веб-сборке - код меняется только через RuStore.
@@ -75,6 +75,13 @@ dependencies {
     // запрещённых RuStore permissions (INTERNET/ACCESS_NETWORK_STATE — штатные для платежей).
     implementation platform('ru.rustore.sdk:bom:2026.08.01')
     implementation 'ru.rustore.sdk:pay'
+    // RuStore Review SDK - окно оценки (см. RuStoreReviewPlugin.java); 10.5.1 в этом BOM.
+    // Разрешений не добавляет (в манифесте SDK только <queries> к RuStore).
+    implementation 'ru.rustore.sdk:review'
+    // RuStore App Update SDK (1.0.3) - проверка и установка обновления через RuStore
+    // (RuStoreUpdatePlugin.java, как в «Карте года»); appupdate 10.5.1 в этом BOM. Стор-сборка
+    // больше не читает свой манифест на CDN. Разрешений не добавляет (AAR: только <queries>).
+    implementation 'ru.rustore.sdk:appupdate'
 }
 
 apply from: 'capacitor.build.gradle'

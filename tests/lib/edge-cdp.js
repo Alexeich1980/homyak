@@ -71,14 +71,20 @@ class Page {
   async goto(url) {
     await this.send('Page.navigate', { url });
   }
-  close() { try { this.ws.close(); } catch (e) {} }
+  // закрыть и сокет, и саму вкладку: раньше вкладка оставалась жить, и к концу qa-shots
+  // в Edge висело 100+ живых страниц с анимациями - прогон замедлялся вдвое и вылетал по
+  // таймауту теста (06.10)
+  close() {
+    try { this.ws.close(); } catch (e) {}
+    if (this.closeTarget) { const f = this.closeTarget; this.closeTarget = null; f(); }
+  }
 }
 
 async function launchEdge() {
   const exe = edgePath();
   if (!exe) throw new Error('Edge не найден');
   const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'homyak-edge-'));
-  const proc = cp.spawn(exe, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+  const proc = cp.spawn(exe, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-sync',
     '--remote-debugging-port=0', '--user-data-dir=' + prof, 'about:blank'], { stdio: 'ignore' });
   const portFile = path.join(prof, 'DevToolsActivePort');
   let port;
@@ -100,6 +106,7 @@ async function launchEdge() {
       const ws = new WebSocket(t.webSocketDebuggerUrl);
       await new Promise((res, rej) => { ws.addEventListener('open', res, { once: true }); ws.addEventListener('error', rej, { once: true }); });
       const p = new Page(ws);
+      p.closeTarget = () => fetch(base + '/json/close/' + t.id).catch(() => {});
       pages.push(p);
       await p.send('Runtime.enable');
       await p.send('Page.enable');

@@ -41,6 +41,16 @@ async function runSelftest(opts) {
     edge = await launchEdge();
     const url = 'http://localhost:' + srv.port + '/index.html?demo&selftest';
     const page = await edge.open('about:blank', { width: WIDTH, height: HEIGHT });
+    // 1.0.3: нарушения CSP (index.html) - тоже FAIL: самопроверка не должна натыкаться на
+    // собственную политику (Edge сообщает о них в Log и в консоль)
+    const csp = [];
+    await page.send('Log.enable').catch(() => {});
+    page.ws.addEventListener('message', (ev) => {
+      let m; try { m = JSON.parse(typeof ev.data === 'string' ? ev.data : Buffer.from(ev.data).toString('utf8')); } catch (e) { return; }
+      const t = (m.params && m.params.entry && m.params.entry.text) ||
+        (m.method === 'Runtime.consoleAPICalled' && m.params.args ? m.params.args.map((a) => a.value || a.description || '').join(' ') : '');
+      if (t && /Content Security Policy|Content-Security-Policy/i.test(t)) csp.push(String(t).slice(0, 240));
+    });
     // профиль Edge каждый раз новый (launchEdge: свежая папка, свой порт) - хранилище
     // пустое, демо засевается как на первом запуске; второй заход с очисткой не нужен:
     // он гонялся наперегонки с сохранениями ещё идущего первого прогона
@@ -55,7 +65,9 @@ async function runSelftest(opts) {
     const lines = await page.eval(
       `Array.prototype.map.call(document.querySelectorAll('#stList > div'), function (d) { return d.textContent; })`) || [];
     const errors = page.logs.slice();
-    return Object.assign(verdict(lines, summary), { summary, lines, errors });
+    const v = verdict(lines, summary);
+    if (csp.length) { v.ok = false; v.fails = v.fails.concat(csp.map((t) => 'FAIL CSP: ' + t)); }
+    return Object.assign(v, { summary, lines, errors, csp });
   } finally {
     if (edge) await edge.close();
     await srv.close();
@@ -76,7 +88,7 @@ async function main() {
     r.errors.slice(0, 10).forEach((l) => console.error('  ' + l));
     process.exit(1);
   }
-  console.log('[self-test] ' + r.summary + ' (экран ' + WIDTH + 'x' + HEIGHT + ')');
+  console.log('[self-test] ' + r.summary + ' (экран ' + WIDTH + 'x' + HEIGHT + '), нарушений CSP: ' + r.csp.length);
   process.exit(r.ok ? 0 : 1);
 }
 

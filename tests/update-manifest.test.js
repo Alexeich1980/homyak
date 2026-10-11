@@ -25,9 +25,10 @@ test('isVer', () => {
 
 const SHA = 'a'.repeat(64);
 
+// www: архив качает сама веб-часть, а CSP тест-сборки пускает только www (review-103-code, 21)
 const WEB = {
   version: '0.3.1',
-  url: 'https://dorokhin-finance.ru/homyak/www-0.3.1.zip',
+  url: 'https://www.dorokhin-finance.ru/homyak/www-0.3.1.zip',
   sha256: SHA,
   size: 520000,
   minShell: '0.3.0'
@@ -50,7 +51,7 @@ test('parseManifest: правильный манифест разбираетс�
     notes: 'что нового',
     web: {
       version: '0.3.1',
-      url: 'https://dorokhin-finance.ru/homyak/www-0.3.1.zip',
+      url: 'https://www.dorokhin-finance.ru/homyak/www-0.3.1.zip',
       sha256: SHA,
       size: 520000,
       minShell: '0.3.0'
@@ -183,40 +184,7 @@ test('decide: обновлённая веб-сборка поверх старо
   assert.equal(d.version, '0.3.7');
 });
 
-// ---------- сторовая сборка: только номер оболочки, только RuStore ----------
-
-test('decideStore: оболочка на канале новее → store, web-раздел не учитывается', () => {
-  // web новее и minShell подходит — не-сторовая сборка пошла бы за OTA, стор — нет
-  const m = Update.parseManifest({ ...GOOD, version: '0.3.1', web: { ...WEB, version: '0.3.5' } });
-  const d = Update.decideStore(m, '0.3.0');
-  assert.equal(d.kind, 'store');
-  assert.equal(d.version, '0.3.1');
-  assert.equal(d.web, undefined, 'стор не должен отдавать web наружу');
-  assert.equal(d.apkUrl, undefined, 'стор не должен отдавать apkUrl наружу');
-});
-
-test('decideStore: оболочка та же, а web новее → none (OTA в сторе не бывает)', () => {
-  const m = Update.parseManifest({ ...GOOD, web: { ...WEB, version: '0.3.9', minShell: '0.3.0' } });
-  assert.equal(Update.decideStore(m, '0.3.0').kind, 'none');
-  // для сравнения: обычная сборка тут предложила бы бесшовное
-  assert.equal(Update.decide(m, '0.3.0', '0.3.0').kind, 'ota');
-});
-
-test('decideStore: оболочка новее канала или равна → none', () => {
-  const m = Update.parseManifest(GOOD);
-  assert.equal(Update.decideStore(m, '0.3.0').kind, 'none');
-  assert.equal(Update.decideStore(m, '0.4.0').kind, 'none');
-});
-
-test('decideStore: оболочка неизвестна → none, не выдумываем', () => {
-  const m = Update.parseManifest(GOOD);
-  assert.equal(Update.decideStore(m, null).kind, 'none');
-  assert.equal(Update.decideStore(m, '').kind, 'none');
-});
-
-test('decideStore: манифест не разобрался → error', () => {
-  assert.equal(Update.decideStore(null, '0.3.0').kind, 'error');
-});
+// ---------- сторовая сборка: с 1.0.3 через RuStore App Update SDK - tests/update-sdk.test.js ----------
 
 test('URL_RUSTORE: страница приложения в RuStore, https', () => {
   assert.match(Update.URL_RUSTORE, /^https:\/\/www\.rustore\.ru\/catalog\/app\/ru\.dorokhin\.homyak$/);

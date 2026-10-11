@@ -95,10 +95,12 @@ test('новый месяц на главном экране начинаетс�
   // чистое хранилище: демо засевается под «сегодня» подменённых часов
   async function clean(url, ms) {
     const pg = await openAt(edge, url, ms);
-    await pg.eval('localStorage.clear(), true');
+    // метка старого документа: ждём именно НОВУЮ страницу (Page.navigate не ждёт загрузки,
+    // а APP_READY старой страницы ещё true - гонка давала «UI.openSummary is not a function»)
+    await pg.eval('localStorage.clear(), window.__oldDoc = 1, true');
     await pg.goto(url);
     await sleep(300);
-    await waitFor(() => pg.eval('!!window.APP_READY'), 15000, 'старт ' + url);
+    await waitFor(() => pg.eval('!window.__oldDoc && !!window.APP_READY && !!(window.UI && UI.openSummary && UI.openCard)'), 15000, 'старт ' + url);
     await dismissOnboard(pg);
     return pg;
   }

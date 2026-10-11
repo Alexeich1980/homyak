@@ -107,7 +107,7 @@ test('makeShip: нет маркера version.js → бросает, а не м�
     // копия www без маркера: index.html с чем угодно, кроме <script src="version.js">
     const src = path.join(dir, 'www');
     fs.mkdirSync(src, { recursive: true });
-    fs.writeFileSync(path.join(src, 'index.html'), '<html><body><script src="ver.js"></script></body></html>');
+    fs.writeFileSync(path.join(src, 'index.html'), '<html><head><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; connect-src \'self\' https://www.dorokhin-finance.ru"></head><body><script src="ver.js"></script></body></html>');
     assert.throws(() => L.makeShip(src, path.join(dir, 'ship'), { release: true }), /маркера/);
     // без флагов тот же index.html проходит: маркер нужен только под инъекцию
     L.makeShip(src, path.join(dir, 'ship2'));

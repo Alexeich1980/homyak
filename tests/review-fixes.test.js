@@ -240,7 +240,7 @@ test('в текстах для пользователя нет «Казны», �
     const s = src(f);
     dead.forEach((d) => assert.equal(s.indexOf(d), -1, f + ': осталось «' + d + '»'));
   });
-  assert.ok(src('backup.js').indexOf('бэкапа «Хомяка»') >= 0);
+  assert.ok(src('backup.js').indexOf('копии данных «Хомяка»') >= 0);
 });
 
 // ---------- 11. онбординг - слой для «назад» ----------

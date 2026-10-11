@@ -70,14 +70,14 @@ function headHtml(rows, factTotal, planTotal) {
   var sub, pctHtml = '';
   if (!lp.limited) sub = kind === 'inc' ? 'план на месяц не задан' : 'лимиты на месяц не заданы';
   else {
-    sub = 'из ' + fmt(lp.plan) + ' ₽ ' + (kind === 'inc' ? 'по плану' : 'по лимиту');
+    sub = 'из ' + fmt(lp.plan) + '\u00a0₽ ' + (kind === 'inc' ? 'по плану' : 'по лимиту');
     if (lp.limited < lp.total) {
       sub += ' · ' + (kind === 'inc' ? 'план задан' : 'лимит задан') + ' у ' + lp.limited + ' из ' + lp.total +
         ' ' + Engine.plural(lp.total, 'категории', 'категорий', 'категорий');
     }
-    if (lp.plan > 0) pctHtml = '<span class="sm-pct">' + pct(lp.fact / lp.plan) + ' %</span>';
+    if (lp.plan > 0) pctHtml = '<span class="sm-pct">' + pct(lp.fact / lp.plan) + '\u00a0%</span>';
   }
-  var h = '<div class="sm-big">' + fmt(factTotal) + ' ₽</div>' +
+  var h = '<div class="sm-big">' + fmt(factTotal) + '\u00a0₽</div>' +
     '<div class="sm-sub"><span>' + esc(sub) + '</span>' + pctHtml + '</div>';
   if (factTotal <= 0) {
     return h + '<div class="empty">В этом месяце пока нет операций</div>';
@@ -89,7 +89,7 @@ function headHtml(rows, factTotal, planTotal) {
   var shown = segs.slice(0, MAX_LEG);
   h += '<div class="sm-leg">' + shown.map(function (s) {
     return '<span class="sm-lg"><span class="sm-dot" style="background:' + s.color + '"></span>' +
-      '<b>' + esc(s.name) + '</b> ' + pct(s.share) + ' %</span>';
+      '<b>' + esc(s.name) + '</b> ' + pct(s.share) + '\u00a0%</span>';
   }).join('') +
     (segs.length > shown.length ? '<span class="sm-lg more">+' + (segs.length - shown.length) + '</span>' : '') +
     '</div>';
@@ -104,16 +104,16 @@ function rowHtml(r, factTotal, idx) {
   var lvl = 'lvl-' + L.lvl, ratio = L.pct, style = '';
   if (r.fact > 0 && !(r.plan > 0)) { lvl = ''; style = 'background:' + hue(idx) + ';'; }
   var note = [];
-  if (factTotal > 0 && r.fact > 0) note.push(pct(r.fact / factTotal) + ' %');
+  if (factTotal > 0 && r.fact > 0) note.push(pct(r.fact / factTotal) + '\u00a0%');
   var word = kind === 'inc' ? 'план' : 'лимит';
-  note.push(r.hasPlan ? word + ' ' + fmt(r.plan) + ' ₽' : word + ' не задан');
+  note.push(r.hasPlan ? word + ' ' + fmt(r.plan) + '\u00a0₽' : word + ' не задан');
   if (r.archived) note.push('в архиве');
   return '<button class="sm-row ' + lvl + (r.archived ? ' retired' : '') + '" type="button" data-id="' + esc(r.catId) + '"' +
     ' style="--tint:' + tint(idx) + ';--hue:' + hue(idx) + '">' +
     '<span class="sm-ico" aria-hidden="true">' + Icons.img(icon, kind, 23, r.name) + '</span>' +
     '<span class="sm-mid">' +
       '<span class="sm-l1"><span class="sm-n">' + esc(r.name) + '</span>' +
-        '<span class="sm-f">' + fmt(r.fact) + ' ₽</span></span>' +
+        '<span class="sm-f">' + fmt(r.fact) + '\u00a0₽</span></span>' +
       '<span class="sm-rb"><i style="' + style + 'width:' + (ratio * 100).toFixed(1) + '%"></i></span>' +
       '<span class="sm-l2">' + esc(note.join(' · ')) + '</span>' +
     '</span>' +
@@ -168,7 +168,7 @@ function feedRowHtml(t) {
         '<div class="fd-w">' + esc(top) + '</div>' +
         '<div class="fd-n">' + esc(name) + '</div>' +
       '</div>' +
-      '<div class="txa ' + cls + '">' + esc(amt) + ' ₽</div>' +
+      '<div class="txa ' + cls + '">' + esc(amt) + '\u00a0₽</div>' +
     '</div>' +
   '</div>';
 }
@@ -183,14 +183,14 @@ function feedHtml() {
       '<div class="fd-h">' + esc(g.label) + '</div>' +
       '<div class="fd-card">' + g.rows.map(feedRowHtml).join('') + '</div>' +
       '<div class="fd-f">' +
-        '<span class="fd-bal">остаток на конец дня ' + fmt(g.balanceEnd) + ' ₽</span>' +
-        '<span class="fd-ch ' + chCls + '">изменение ' + (ch > 0 ? '+' : '') + fmt(ch) + ' ₽</span>' +
+        '<span class="fd-bal">остаток на конец дня ' + fmt(g.balanceEnd) + '\u00a0₽</span>' +
+        '<span class="fd-ch ' + chCls + '">изменение ' + (ch > 0 ? '+' : '') + fmt(ch) + '\u00a0₽</span>' +
       '</div>' +
     '</div>';
   }).join('');
 }
 
-function noPlansHtml() { return '<div class="empty">Пока нет категорий. Добавь их в меню → «Настроить категории».</div>'; }
+function noPlansHtml() { return '<div class="empty">Пока нет категорий. Добавьте их в меню → «Настроить категории».</div>'; }
 
 // ---------- экран «Тепловая карта»: дни месяца по тратам ----------
 function heatHtml() {
@@ -211,7 +211,7 @@ function heatHtml() {
     var on = date === heatDay ? ' on' : '';
     // первый день месяца встаёт в свою колонку недели (Пн..Вс), пустых клеток слева нет
     var col = d === 1 ? ' style="grid-column-start:' + (lead + 1) + '"' : '';
-    cells += '<button class="hm-cell' + hot + on + '" type="button" data-date="' + date + '"' + col + ' aria-label="' + d + ': ' + fmt(v) + ' ₽">' +
+    cells += '<button class="hm-cell' + hot + on + '" type="button" data-date="' + date + '"' + col + ' aria-label="' + d + ': ' + fmt(v) + '\u00a0₽">' +
       '<i aria-hidden="true" style="--i:' + it.toFixed(3) + '"></i>' +
       '<span class="hm-d">' + d + '</span></button>';
   }
@@ -236,10 +236,10 @@ function attnRow(r) {
   var S = UI.S;
   var icon = S.icons[r.catId] || Icons.guessKind(r.name, 'exp');
   var ratio = Math.min(r.ratio, 1);
-  var fp = fmt(r.fact) + ' / ' + (r.plan > 0 ? fmt(r.plan) : '—') + ' ₽';
+  var fp = fmt(r.fact) + ' / ' + (r.plan > 0 ? fmt(r.plan) : '—') + '\u00a0₽';
   var note = r.level === 'over'
-    ? (r.plan > 0 ? '+' + fmt(r.over) + ' ₽ сверх' : fmt(r.fact) + ' ₽ при лимите 0')
-    : pct(r.ratio) + ' % лимита';
+    ? (r.plan > 0 ? '+' + fmt(r.over) + '\u00a0₽ сверх' : fmt(r.fact) + '\u00a0₽ при лимите 0')
+    : pct(r.ratio) + '\u00a0% лимита';
   return '<div class="at-row lvl-' + r.level + (r.archived ? ' retired' : '') + '">' +
     '<span class="sm-ico" aria-hidden="true">' + Icons.img(icon, 'exp', 23, r.name) + '</span>' +
     '<span class="at-mid">' +
@@ -281,13 +281,13 @@ function dynHtml() {
     var w = Math.max(0, Math.min(d.fact / max, 1));
     var pw = d.plan > 0 ? Math.max(0, Math.min(d.plan / max, 1)) : -1;
     var cls = 'dy-row' + (on ? ' on' : '') + (over ? ' over' : '') + (zero ? ' zero' : '');
-    return '<button class="' + cls + '" type="button" data-m="' + d.m + '" aria-label="' + MM[d.m] + ': ' + fmt(d.fact) + ' ₽">' +
+    return '<button class="' + cls + '" type="button" data-m="' + d.m + '" aria-label="' + MM[d.m] + ': ' + fmt(d.fact) + '\u00a0₽">' +
       '<span class="dy-m">' + MM[d.m] + '</span>' +
       '<span class="dy-track">' +
         '<span class="dy-fact" style="width:' + (w * 100).toFixed(1) + '%"></span>' +
         (pw >= 0 ? '<span class="dy-plan" style="left:' + (pw * 100).toFixed(1) + '%" aria-hidden="true"></span>' : '') +
       '</span>' +
-      '<span class="dy-v">' + (zero ? '—' : fmt(d.fact)) + ' ₽</span>' +
+      '<span class="dy-v">' + (zero ? '—' : fmt(d.fact)) + '\u00a0₽</span>' +
     '</button>';
   }).join('');
 

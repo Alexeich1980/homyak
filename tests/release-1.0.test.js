@@ -123,7 +123,8 @@ function fakeApk(o) {
     : '<script>window.HOMYAK_FULL_ACCESS=false;window.HOMYAK_DEMO=false;window.HOMYAK_PAY=true;window.HOMYAK_STORE=true;</script>';
   const bag = {
     'assets/public/pay-config.js': strToU8("x = { CONSOLE_APP_ID: '" + (o.jsId || id) + "' }"),
-    'assets/public/index.html': strToU8(flags + '<script src="version.js"></script>'),
+    'assets/public/index.html': strToU8('<meta http-equiv="Content-Security-Policy" content="default-src \'self\'; ' +
+      (o.connect || "connect-src 'none'") + '">' + flags + '<script src="version.js"></script>'),
     'resources.arsc': new Uint8Array(Buffer.concat([Buffer.from([2, 0, 12, 0]), Buffer.from(o.arscId || id, 'utf8'), Buffer.from([0])]))
   };
   if (o.selftest) bag['assets/public/selftest.js'] = strToU8('x');
@@ -148,6 +149,8 @@ test('verifyApk КРАСНЕЕТ: id разъехался, reel-флаг, нет
     { appId: '2063760325', store: true }), /HOMYAK_STORE/);
   assert.throws(() => L.verifyApk(fakeApk({ flags: '' }), { appId: '2063760325', store: false }), /релизных флагов/);
   assert.throws(() => L.verifyApk(fakeApk({ selftest: true }), { appId: '2063760325', store: true }), /selftest/);
+  // 1.0.3: стор-APK с открытой сетью веб-части (CSP не закрыт) - красный
+  assert.throws(() => L.verifyApk(fakeApk({ connect: "connect-src 'self' https://www.dorokhin-finance.ru" }), { appId: '2063760325', store: true }), /connect-src 'none'/);
 });
 
 test('OTA_MTIME - настоящая дата в пределах zip (1980-2099), а не Invalid Date', () => {
@@ -268,10 +271,10 @@ test('стор: update.apply не скачивает и не переставл�
   }
 });
 
-test('стор: окна OTA/APK подменяются окном «Открыть в RuStore»', () => {
+test('стор: окна OTA/APK в стор-сборке не открываются вовсе (1.0.3: манифест стор не читает)', () => {
   const s = rd('www/update.js');
-  assert.ok(/function dlgOta\(d\) \{\s*if \(isStore\(\)\) \{ dlgStore\(d\); return; \}/.test(s));
-  assert.ok(/function dlgApk\(d\) \{\s*if \(isStore\(\)\) \{ dlgStore\(d\); return; \}/.test(s));
+  assert.ok(/function dlgOta\(d\) \{\s*if \(isStore\(\)\) return;/.test(s));
+  assert.ok(/function dlgApk\(d\) \{\s*if \(isStore\(\)\) return;/.test(s));
 });
 
 test('стор: boot.js никогда не откатывается на скачанные OTA-папки, метку снимает', () => {

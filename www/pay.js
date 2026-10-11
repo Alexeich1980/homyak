@@ -59,7 +59,17 @@
         return status().then(function (st) { return st.owned; });
       },
       purchase: function () {
-        return Promise.resolve(plugin.purchase({ productId: productId })).then(function (r) {
+        // шторка оплаты уводит приложение в фон - «Защита входа» после неё не запирает
+        // (вызов кончился без ухода в фон - RuStore сразу ответил ошибкой - отметку снимаем)
+        var release = function () {};
+        try {
+          if (typeof window !== 'undefined' && window.AppLock && window.AppLock.away) {
+            var rl = window.AppLock.away(window.AppLock.AWAY_CALL);
+            if (typeof rl === 'function') release = rl;
+          }
+        } catch (e) {}
+        return Promise.resolve().then(function () { return plugin.purchase({ productId: productId }); })
+          .then(function (r) { release(); return r; }, function (e) { release(); throw e; }).then(function (r) {
           r = r || {};
           return { ok: !!r.ok, purchaseId: r.purchaseId, cancelled: !!r.cancelled,
                    unavailable: !!r.unavailable, error: r.error };

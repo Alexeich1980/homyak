@@ -41,14 +41,47 @@ test('publish-update.py: только стор, только update.json, без
   assert.ok(!/application\/zip|vnd\.android\.package-archive/.test(src), 'в скрипте осталась заливка zip/APK');
 });
 
-// Манифест, каким его зальёт publish-update.py (без web), стор-приложение понимает.
-test('манифест без web: стор-приложение видит новую версию и зовёт в RuStore', () => {
-  const m = U.parseManifest({
-    build: 'store', version: '1.0.2', size: 1,
-    apkUrl: 'https://dorokhin-finance.ru/homyak-store/homyak-1.0.2.apk', notes: 'x'
-  });
-  assert.ok(m, 'манифест без web не разобрался');
-  assert.equal(m.web, null);
-  assert.deepEqual(U.decideStore(m, '1.0.1'), { kind: 'store', version: '1.0.2', notes: 'x' });
-  assert.deepEqual(U.decideStore(m, '1.0.2'), { kind: 'none' });
+// Манифест, каким его зальёт publish-update.py (без web): его читают установленные 1.0.2
+// и старше (с 1.0.3 стор-приложение спрашивает RuStore само, tests/update-sdk.test.js).
+test('манифест стор-сборки: только номер версии, без web - старые клиенты его разбирают', () => {
+  const m = L.channelManifest({ mode: { release: true, store: true }, version: '1.0.3', size: 1,
+    apkUrl: 'https://www.dorokhin-finance.ru/homyak-store/homyak-1.0.3.apk', notes: 'x',
+    web: { url: 'https://www.dorokhin-finance.ru/homyak-store/www-1.0.3.zip', sha256: 'a'.repeat(64), size: 5, minShell: '0.1.0' } });
+  assert.equal(m.build, 'store');
+  assert.equal(m.web, undefined, 'в стор-манифесте остался раздел web');
+  const parsed = U.parseManifest(m);
+  assert.ok(parsed, 'манифест без web не разобрался кодом клиента');
+  assert.equal(parsed.web, null);
+  assert.equal(parsed.version, '1.0.3');
+  // тест-сборка - как раньше, с web
+  const t = L.channelManifest({ mode: {}, version: '1.0.3', size: 1, apkUrl: m.apkUrl, notes: '',
+    web: { url: 'https://www.dorokhin-finance.ru/homyak-store/www-1.0.3.zip', sha256: 'a'.repeat(64), size: 5, minShell: '0.1.0' } });
+  assert.equal(t.build, 'test');
+  assert.equal(t.web.version, '1.0.3');
+  assert.equal(L.shipsWebZip({ release: true, store: true }), false);
+  assert.equal(L.shipsWebZip({}), true);
+});
+
+test('build-apk.js: веб-архив и раздел web только через shipsWebZip/channelManifest (стор без zip)', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'build-apk.js'), 'utf8');
+  assert.match(src, /if \(L\.shipsWebZip\(MODE\)\) \{\s*zipBuf = L\.zipShip\(WWW_SHIP\);/);
+  assert.match(src, /L\.channelManifest\(\{/);
+  assert.equal(src.split('L.zipShip(').length, 2, 'zipShip зовётся ещё где-то мимо shipsWebZip');
+});
+
+test('build-ota.js - заглушка: только отказ, без кода сборки', { skip: !fs.existsSync(path.join(ROOT, 'build-ota.js')) && 'внутренний файл не входит в публичный репозиторий' }, () => {
+  const src = fs.readFileSync(path.join(ROOT, 'build-ota.js'), 'utf8');
+  assert.ok(!/require\(|zipShip|makeShip|writeFileSync|UPDATE_JSON/.test(src), 'в заглушке остался код сборки');
+  assert.match(src, /process\.exit\(1\)/);
+});
+
+// 05.10.2026: CDN сайта не отдавал Access-Control-Allow-Origin, и проверка обновлений в
+// приложении писала «Нет связи». publish-update.py обязан проверять канал так же, как
+// приложение (запрос с Origin https://localhost), и падать без CORS-заголовка.
+test('publish-update.py: после заливки проверяет манифест глазами приложения (CORS)', { skip: !fs.existsSync(path.join(ROOT, 'publish-update.py')) && 'внутренний файл не входит в публичный репозиторий' }, () => {
+  const src = fs.readFileSync(path.join(ROOT, 'publish-update.py'), 'utf8');
+  assert.match(src, /"Origin": "https:\/\/localhost"/);
+  assert.match(src, /Access-Control-Allow-Origin/);
+  assert.ok(src.indexOf('Access-Control-Allow-Origin') > src.indexOf('put_object('), 'проверка стоит до заливки');
+  assert.match(src, /raise SystemExit\("\[ОШИБКА\] манифест залит, но CDN не отдаёт/);
 });

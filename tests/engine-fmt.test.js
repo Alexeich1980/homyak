@@ -3,7 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const Engine = require('../www/engine.js');
 
-const NB = ' ';   // неразрывный пробел — разделитель разрядов во всём приложении
+const NB = '\u00a0';   // неразрывный пробел — разделитель разрядов во всём приложении
 
 test('fmt: разряды и знак', () => {
   assert.strictEqual(Engine.NBSP, NB);

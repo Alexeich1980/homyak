@@ -78,6 +78,29 @@ function flagsTag(opts) {
   return '<script>' + js + '</script>\n';
 }
 
+// ---------- CSP (1.0.3, образец Сейф/mobile/build-lib.js shipCsp) ----------
+// В www/index.html ровно один мета-тег CSP. Тест-сборка и превью: connect-src - свои файлы и
+// свой сайт (манифест тест-сборки). Стор: веб-часть в сеть не ходит вовсе - обновления через
+// RuStore App Update SDK (нативный плагин, CSP его не задевает), оплата и оценка тоже нативные.
+// Заводская копия www (files.json) в сторе не делается (update.js confirmBoot).
+const CSP_META_RE = /(<meta http-equiv="Content-Security-Policy" content=")([^"]*)(")/g;
+const CSP_CONNECT_DEV = "connect-src 'self' https://www.dorokhin-finance.ru";
+const CSP_CONNECT_NONE = "connect-src 'none'";
+function cspOf(html) {
+  const all = [...String(html).matchAll(CSP_META_RE)];
+  if (all.length !== 1) throw new Error('в index.html должен быть ровно один мета-тег CSP, найдено: ' + all.length);
+  return all[0][2];
+}
+function shipCsp(html) {
+  const csp = cspOf(html);
+  if (csp.split(CSP_CONNECT_DEV).length !== 2) {
+    throw new Error('в CSP index.html нет ровно одного «' + CSP_CONNECT_DEV + '» - некуда закрыть сеть для стора');
+  }
+  const out = String(html).replace(CSP_META_RE, (m, a, c, z) => a + c.replace(CSP_CONNECT_DEV, CSP_CONNECT_NONE) + z);
+  if (cspOf(out).indexOf(CSP_CONNECT_NONE) < 0) throw new Error('CSP стора не закрыл сеть');
+  return out;
+}
+
 // Чистая копия www под сборку: без отладочных файлов и без тега selftest.js в index.html
 // (файла в сборке нет - приложение не должно ломиться за отсутствующим скриптом).
 // opts = {release, store} - релизные флаги вшиваются ЗДЕСЬ, одним кодом для APK и OTA:
@@ -91,6 +114,8 @@ function makeShip(www, ship, opts) {
   const idx = path.join(ship, 'index.html');
   let html = fs.readFileSync(idx, 'utf8')
     .replace(/^[ \t]*<script src="selftest\.js"><\/script>\r?\n/m, '');
+  cspOf(html);   // CSP есть и он один - иначе сборка падает, а не уезжает без него
+  if (opts && opts.store && !opts.reel) html = shipCsp(html);
   const tag = flagsTag(opts);
   if (tag) {
     const at = html.indexOf(FLAG_MARKER);
@@ -340,6 +365,46 @@ function checkDistribution(mode) {
   }
 }
 
+// Подпись APK (1.0.3, образец Сейф/mobile/build-apk.js). Стор/релиз ОБЯЗАН идти под своим
+// ключом keys/homyak.jks: debug-ключ свой на каждой машине и общеизвестен - APK на нём
+// отлаживаемый (база читается по USB), RuStore не примет его как обновление, а поверх
+// установленного Android его не поставит («пакет повреждён»). Раньше сборка без ключа тихо
+// откатывалась на assembleDebug с предупреждением - теперь стор/релиз падает ДО Gradle.
+// Тест-сборке (только себе) debug-подпись по-прежнему можно.
+// Возвращает {task, debug}: какую задачу Gradle звать.
+function signingPlan(mode, hasKey) {
+  const release = !!(mode && (mode.release || mode.store));
+  if (release && !hasKey) {
+    throw new Error('стор/релиз без своего ключа подписи запрещён: APK на debug-ключе RuStore не примет,\n' +
+      'а поверх установленного «Хомяка» он не встанет («пакет повреждён»).\n' +
+      'Нужны keys/homyak.jks и keys/homyak.properties - восстанови их из своей копии (keys/README.txt).\n' +
+      'Себе на проверку без ключа: node build-apk.js (тест-сборка, out/test/).');
+  }
+  return hasKey ? { task: 'assembleRelease', debug: false } : { task: 'assembleDebug', debug: true };
+}
+
+// Манифест out/<режим>/update.json, который пишет build-apk.js. Стор (1.0.3): ТОЛЬКО номер
+// версии - ни веб-архива www-<v>.zip, ни раздела web (стор-приложение код не подменяет, а с
+// 1.0.3 и манифест не читает: обновления через RuStore App Update SDK). Номер на канал ещё
+// нужен приложениям 1.0.2 и старше - они раз в неделю читают homyak-store/update.json
+// (publish-update.py). Тест-сборка: как раньше, apk + web (её OTA-путь не трогали).
+// o = {mode, version, apkUrl, size, notes, web}; web - {url, sha256, size, minShell} или null.
+function shipsWebZip(mode) { return !(mode && mode.store); }
+function channelManifest(o) {
+  const mode = o.mode || {};
+  const m = {
+    build: mode.store ? 'store' : (mode.release ? 'release' : 'test'),
+    version: o.version,
+    apkUrl: o.apkUrl,
+    size: o.size,
+    notes: o.notes || ''
+  };
+  if (shipsWebZip(mode) && o.web) {
+    m.web = { version: o.version, url: o.web.url, sha256: o.web.sha256, size: o.web.size, minShell: o.web.minShell };
+  }
+  return m;
+}
+
 function checkModeConflict(mode, reel) {
   if (reel && mode && (mode.release || mode.store)) {
     throw new Error('--reel нельзя совмещать с --release/--store: reel-сборка даёт полный доступ и только для съёмки');
@@ -383,6 +448,7 @@ function verifyApk(apkBuf, opts) {
     throw new Error('в index.html APK нет релизных флагов (FULL_ACCESS/DEMO=false)');
   }
   if (opts.store && idx.indexOf('window.HOMYAK_STORE=true;') < 0) throw new Error('в index.html APK нет HOMYAK_STORE=true');
+  if (opts.store && cspOf(idx).indexOf(CSP_CONNECT_NONE) < 0) throw new Error("в index.html стор-APK сеть не закрыта (нет connect-src 'none')");
   if (idx.indexOf('HOMYAK_REEL') >= 0) throw new Error('в index.html релизного APK есть reel-флаг');
   if (files['assets/public/selftest.js']) throw new Error('в APK уехал отладочный selftest.js');
   const so = Object.keys(files).filter((n) => /\.so$/.test(n));
@@ -472,11 +538,60 @@ function pruneOldVersions(dir, keep) {
   return removed.sort();
 }
 
+// ---------- гейт версии стор-сборки (1.0.3, ревью) ----------
+// В 1.0.3 почти собрали APK с version 1.0.2 в package.json: RuStore не примет тот же
+// versionCode, а «что нового» ушло бы от прошлой версии. Теперь стор-сборка ДО self-test и
+// Gradle сверяет собираемую версию с историей:
+//   - строго новее опубликованной (out/store/published.json, его пишет publish-update.py);
+//   - не ниже уже собранной для стора (out/store/last-apk.json): та же версия можно -
+//     это пересборка до публикации (кандидат → финал), ниже - откат, нельзя;
+//   - стор-код не ниже versionCode в android/app/build.gradle (там код последней сборки),
+//     если та сборка была релизной (нечётный код). Чётный код - тест-сборка (бит типа 0):
+//     её build.gradle пишет тоже, и тест 1.0.4 не должен запрещать исправленный стор 1.0.3
+//     (ревью 1.0.3).
+function cmpVer(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  return cmpSemver(pa, pb);
+}
+function readJsonVersion(p) {
+  try { const v = JSON.parse(fs.readFileSync(p, 'utf8')).version; return /^\d+\.\d+\.\d+$/.test(String(v || '')) ? String(v) : null; }
+  catch (e) { return null; }
+}
+function storeHistory(outStoreDir, gradlePath) {
+  let gradleCode = 0;
+  try { gradleCode = +((fs.readFileSync(gradlePath, 'utf8').match(/^\s*versionCode\s+(\d+)\s*$/m) || [])[1] || 0); } catch (e) {}
+  return {
+    published: readJsonVersion(path.join(outStoreDir, 'published.json')),
+    built: readJsonVersion(path.join(outStoreDir, 'last-apk.json')),
+    gradleCode
+  };
+}
+// o.store === false - не стор (тест, reel): гейт молчит. Условие режима живёт здесь, а не
+// в build-apk.js: там до self-test не должно быть условий режима (selftest-gate.test.js).
+function checkVersionGate(o) {
+  if (o.store === false) return 0;
+  const v = o.version, code = versionCodeOf(v, true);
+  const fix = '\nПодними version в package.json и допиши раздел в CHANGELOG.md (RELEASE.md, «Новая версия»).';
+  if (o.published && cmpVer(v, o.published) <= 0) {
+    throw new Error('версия ' + v + ' из package.json не новее опубликованной ' + o.published +
+      ' (out/store/published.json): RuStore не примет тот же или меньший номер.' + fix);
+  }
+  if (o.built && cmpVer(v, o.built) < 0) {
+    throw new Error('версия ' + v + ' из package.json ниже уже собранной для стора ' + o.built +
+      ' (out/store/last-apk.json) - это откат.' + fix);
+  }
+  if (o.gradleCode && o.gradleCode % 2 === 1 && code < o.gradleCode) {
+    throw new Error('стор-код ' + code + ' версии ' + v + ' меньше versionCode ' + o.gradleCode +
+      ' в android/app/build.gradle (код последней сборки).' + fix);
+  }
+  return code;
+}
+
 module.exports = {
-  DEV_ONLY, FLAG_MARKER, rmrf, copyClean, listFiles, makeShip, flagsTag, buildMode,
+  DEV_ONLY, FLAG_MARKER, CSP_CONNECT_DEV, CSP_CONNECT_NONE, cspOf, shipCsp, rmrf, copyClean, listFiles, makeShip, flagsTag, buildMode,
   versionCodeOf, writeFilesJson, zipShip, selfCheckZip, sha256hex, stampWeb, readVersion, topNotes,
   OTA_MTIME, CORE_IN_BUNDLE,
   APP_ID_PLACEHOLDER, validAppId, parseAppIdArg, readAppIdJs, readAppIdXml, stampAppIdJs, stampAppIdXml,
-  appIdState, stampAppIdFiles, readAppIdFiles, checkModeConflict, checkDistribution, storeOutNames, verifyApk,
-  pruneOldVersions
+  appIdState, stampAppIdFiles, readAppIdFiles, checkModeConflict, signingPlan, shipsWebZip, channelManifest, checkDistribution, storeOutNames, verifyApk,
+  pruneOldVersions, cmpVer, storeHistory, checkVersionGate
 };

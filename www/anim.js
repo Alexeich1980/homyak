@@ -124,7 +124,7 @@ function odoOverlay(el, s0, s1, ms, delay) {
       cell = document.createElement('span');
       cell.style.cssText = 'display:block;height:' + h + 'px;line-height:' + h + 'px;' +
         (ch === ' ' ? 'width:.3em;' : '');
-      cell.textContent = ch === ' ' ? ' ' : ch;
+      cell.textContent = ch === ' ' ? '\u00a0' : ch;
     }
     ov.appendChild(cell);
   }
@@ -157,7 +157,7 @@ function odometer(el, from, to, ms, delay) {
   stopOdo(el);
   // в шапке числа идут без валюты (data-suf=""), на плитках — с « ₽»
   var suf = el.getAttribute('data-suf');
-  if (suf === null) suf = ' ₽';
+  if (suf === null) suf = '\u00a0₽';
   var end = UI.fmt(to) + suf;
   el.textContent = end;                       // настоящая подпись всегда верная
   if (reduced() || from === to || !isFinite(from) || !isFinite(to)) return;

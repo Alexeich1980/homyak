@@ -49,8 +49,26 @@ function ok(v, what) { if (!v) fail(what); }
 // а не «как получилось».
 // Автономный форк: синка с ПК нет (пункт mSync убран), зато есть свой экран
 // «Настроить категории» (mCats). Порядок держим списком - он проверяемый.
-var MENU_ORDER = ['mTheme', 'mUpdate', 'mCats', 'mWallets', 'mSound', 'mHaptic',
-                  'mHints', 'mAbout', 'mBackup', 'mRestore'];
+// 1.0.3 (решение Алексея 05.10): меню из 8 плиток. Звук, вибрация и подсказки - в подменю
+// «Звук и подсказки» (mPrefs), сохранение, восстановление и напоминание - в «Копия данных» (mCopy).
+var MENU_ORDER = ['mTheme', 'mUpdate', 'mCats', 'mWallets', 'mPrefs', 'mCopy', 'mLock', 'mAbout'];
+var MENU_TITLES = ['Тема', 'Обновление', 'Настроить категории', 'Настроить кошельки',
+                   'Звук и подсказки', 'Копия данных', 'Защита входа', 'О приложении'];
+// старые плитки, переехавшие в подменю: в меню их быть не должно
+var MENU_GONE = ['mSound', 'mHaptic', 'mHints', 'mRemind', 'mBackup', 'mRestore'];
+// Открыть подменю плитки (меню под ним остаётся открытым), выполнить fn, всё закрыть.
+function withSub(tileId, fn) {
+  UI.openMenu();
+  document.getElementById(tileId).click();
+  var done = function () { UI.closeDlg(); UI.closeMenu(); };
+  try {
+    ok(!document.getElementById('dlg').hidden, 'подменю ' + tileId + ' не открылось');
+    var r = fn();
+    if (r && r.then) return r.then(function (v) { done(); return v; }, function (e) { done(); throw e; });
+    done();
+    return r;
+  } catch (e) { done(); throw e; }
+}
 
 // innerHTML браузер печатает по-своему («<path/>» → «<path></path>»), поэтому
 // ожидаемую иконку прогоняем через тот же разбор, а не сравниваем строки в лоб
@@ -188,11 +206,12 @@ add('экран: заголовки блоков считают суммы', fun
   Engine.listCategories(S, 'inc').forEach(function (c) { incPlan += Engine.planOr0(S, c.id, ymStr); });
   // «из N» показывается только когда план/лимит вообще задан (иначе просто «· факт ₽»)
   var incSuf = incPlan > 0 ? ' из ' + UI.fmt(incPlan) : '';
-  var expSuf = plan > 0 ? ' из ' + UI.fmt(plan) : '';
   eq(document.getElementById('incHeadText').textContent,
-    'Доходы · ' + UI.fmt(inc) + incSuf + ' ₽', 'заголовок доходов');
+    'Доходы · ' + UI.fmt(inc) + incSuf + '\u00a0₽', 'заголовок доходов');
+  // 1.0.3: факт расходов - только в шапке («Потрачено»), в заголовке блока - сумма лимитов
   eq(document.getElementById('expHead').textContent,
-    'Расходы · ' + UI.fmt(fact) + expSuf + ' ₽', 'заголовок расходов');
+    plan > 0 ? 'Расходы · лимит ' + UI.fmt(plan) + '\u00a0₽' : 'Расходы', 'заголовок расходов');
+  ok(document.getElementById('expHead').textContent.indexOf(UI.fmt(fact)) < 0 || fact === plan, 'факт расходов повторён в заголовке блока');
 });
 
 // (2г) главный экран не прокручивается: всё, что нужно, помещается в окно
@@ -529,7 +548,7 @@ add('карточка: лист собран по макету, подпись �
   eq(document.getElementById('cardSub').textContent,
     n ? n + ' ' + Engine.plural(n, 'операция', 'операции', 'операций') : 'операций пока нет', 'подпись');
   eq(document.getElementById('cardAmt').textContent,
-    UI.money(Engine.walletBalance(UI.S, id)) + ' ₽', 'сумма на карточке');
+    UI.money(Engine.walletBalance(UI.S, id)) + '\u00a0₽', 'сумма на карточке');
   ok(document.getElementById('cardBase'), 'нет кнопки «Изменить баланс»');
   ok(document.getElementById('cardTransfer'), 'нет кнопки «Перевести»');
   ok(document.getElementById('cardSetup'), 'нет кнопки «Настроить»');
@@ -541,10 +560,14 @@ add('карточка: лист собран по макету, подпись �
 });
 
 // (17б) порченое хранилище: приложение не умирает, битый текст откладывается на разбор
-add('порча базы: откат на пустое состояние, битое отложено в .broken', function () {
-  var was = null;
-  try { was = localStorage.getItem(UI.BROKEN_KEY); } catch (e) {}
-  try { localStorage.removeItem(UI.BROKEN_KEY); } catch (e) {}
+// в карантин со своим ключом (1.0.3: BROKEN_KEY-<дата-время>, копия проверена чтением)
+add('порча базы: откат на пустое состояние, битое отложено в карантин', function () {
+  function qKeys() {
+    var out = [];
+    try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf(UI.BROKEN_KEY + '-') === 0) out.push(k); } } catch (e) {}
+    return out;
+  }
+  var before = qKeys();
   try {
     // ровно те входы из ревью, что валили запуск целиком
     ['{"ver":1,"ui":{"order":"no"}}', '{обрезан', '"строка"', '[1,2,3]'].forEach(function (raw) {
@@ -553,16 +576,17 @@ add('порча базы: откат на пустое состояние, би�
       ok(st && typeof st === 'object', 'нет состояния для ' + raw);
       ok(Array.isArray(st.tx) && Array.isArray(st.wallets), 'форма поехала на ' + raw);
       ok(st.ui && Array.isArray(st.ui.order.exp), 'ui.order не массив на ' + raw);
+      // первый вход - наши данные с кривым полем: миграция чинит его, это не порча
+      if (raw.charAt(1) === '"' && raw.indexOf('"ver"') === 1) return;
+      var pr = UI.loadProblem();
+      ok(pr && pr.kind === 'broken' && pr.copied === true, 'копия битого не легла для ' + raw);
+      eq(localStorage.getItem(pr.key), raw, 'в карантине не тот текст для ' + raw);
     });
-    var kept = null;
-    try { kept = localStorage.getItem(UI.BROKEN_KEY); } catch (e) {}
-    ok(kept, 'битый текст не отложен в ' + UI.BROKEN_KEY + ' — восстанавливать будет нечего');
+    var made = qKeys().filter(function (k) { return before.indexOf(k) < 0; });
+    eq(made.length, 3, 'каждая порча - своя копия в карантине (вторая не затирает первую)');
     ok(typeof UI.wasRecovered() === 'boolean', 'нет признака восстановления');
   } finally {
-    try {
-      if (was === null) localStorage.removeItem(UI.BROKEN_KEY);
-      else localStorage.setItem(UI.BROKEN_KEY, was);
-    } catch (e) {}
+    try { qKeys().forEach(function (k) { if (before.indexOf(k) < 0) localStorage.removeItem(k); }); } catch (e) {}
   }
 });
 
@@ -581,7 +605,7 @@ add('отказ записи: save() возвращает false и вешает 
   UI.closeDlg();                                  // окно «Не удалось сохранить» показали один раз
   eq(res, false, 'save() соврал про успех');
   eq(warn.hidden, false, 'красной полосы нет');
-  ok(warn.textContent.indexOf('бэкап') >= 0, 'полоса не зовёт делать бэкап: ' + warn.textContent);
+  ok(warn.textContent.indexOf('Копия данных') >= 0, 'полоса не зовёт сохранить копию: ' + warn.textContent);
   eq(UI.save(), true, 'после починки хранилища save() не прошёл');
   eq(warn.hidden, true, 'полоса не убралась после успешной записи');
 });
@@ -637,7 +661,11 @@ add('меню: ровно те плитки и в том порядке', functi
   eq(ids.join(','), MENU_ORDER.join(','), 'состав меню');
   eq(document.querySelector('#mCats .mi-t').textContent, 'Настроить категории', 'подпись категорий');
   eq(document.querySelector('#mWallets .mi-t').textContent, 'Настроить кошельки', 'подпись кошельков');
-  eq(document.querySelector('#mSound .mi-t').textContent, 'Звук', 'подпись звука');
+  var titles = [].map.call(document.querySelectorAll('#menu .menu-list .mi .mi-t'), function (t) { return t.textContent; });
+  eq(titles.join('|'), MENU_TITLES.join('|'), 'названия плиток');
+  eq(ids.length, 8, 'в меню не 8 плиток');
+  MENU_GONE.forEach(function (id) { ok(!document.getElementById(id), 'в меню осталась старая плитка ' + id); });
+  eq(document.getElementById('mCopyInfo').textContent, 'сохранить, восстановить', 'подпись «Копия данных»');
   ok(!document.getElementById('mSummary'), 'в меню осталась «Аналитика месяца»');
   ok(!document.getElementById('mPair'), 'в меню остался «Связать с компом»');
   ok(!document.getElementById('mMonth'), 'в меню остался «Месяц»');
@@ -685,13 +713,22 @@ add('меню: у плиток иконки, счёт кошельков и ве
 add('меню: выключатель вибрации отражает настройку', function () {
   var was = UI.S.ui.haptics;
   try {
-    UI.S.ui.haptics = true; UI.renderMenu();
-    ok(document.getElementById('mHapticSw').classList.contains('on'), 'включённая вибрация без «on»');
-    eq(document.getElementById('mHapticInfo').textContent, 'вкл', 'подпись «вкл»');
-    document.getElementById('mHaptic').click();
-    eq(UI.S.ui.haptics, false, 'тап по плитке не выключил вибрацию');
-    ok(!document.getElementById('mHapticSw').classList.contains('on'), 'выключатель остался включённым');
-    eq(document.getElementById('mHapticInfo').textContent, 'выкл', 'подпись «выкл»');
+    UI.S.ui.haptics = true; UI.S.ui.sound = true; UI.S.ui.hints = true; UI.renderMenu();
+    withSub('mPrefs', function () {
+      eq(document.getElementById('dlgTitle').textContent, 'Звук и подсказки', 'заголовок подменю');
+      var row = document.getElementById('snHaptic');
+      ok(row, 'в подменю нет «Вибрация»');
+      ok(row.querySelector('.mi-sw').classList.contains('on'), 'включённая вибрация без «on»');
+      eq(row.getAttribute('aria-pressed'), 'true', 'aria-pressed');
+      eq(document.getElementById('mPrefsInfo').textContent, 'всё вкл', 'подпись плитки «всё вкл»');
+      row.click();
+      eq(UI.S.ui.haptics, false, 'тумблер не выключил вибрацию');
+      ok(!row.querySelector('.mi-sw').classList.contains('on'), 'выключатель остался включённым');
+      eq(row.getAttribute('aria-pressed'), 'false', 'aria-pressed после выключения');
+      eq(document.getElementById('mPrefsInfo').textContent, 'вибро выкл', 'подпись плитки после выключения');
+      ok(!document.getElementById('dlg').hidden, 'тумблер закрыл подменю');
+      ok(UI.overlayFlags().menu, 'подменю закрыло меню');
+    });
   } finally { UI.S.ui.haptics = was; UI.save(); UI.renderMenu(); }
 });
 
@@ -699,17 +736,30 @@ add('меню: выключатель вибрации отражает наст
 add('меню: выключатель звука отражает настройку', function () {
   var was = UI.S.ui.sound;
   try {
-    UI.S.ui.sound = true; UI.renderMenu();
-    ok(document.getElementById('mSoundSw').classList.contains('on'), 'включённый звук без «on»');
-    eq(document.getElementById('mSoundInfo').textContent, 'вкл', 'подпись «вкл»');
-    eq(document.getElementById('mSound').getAttribute('aria-pressed'), 'true', 'aria-pressed');
-    document.getElementById('mSound').click();
-    eq(UI.S.ui.sound, false, 'тап по плитке не выключил звук');
-    ok(!document.getElementById('mSoundSw').classList.contains('on'), 'выключатель остался включённым');
-    eq(document.getElementById('mSoundInfo').textContent, 'выкл', 'подпись «выкл»');
-    // вибрация - отдельная настройка, звук её не трогает
-    eq(UI.S.ui.haptics !== false, true, 'звук выключил заодно и вибрацию');
-  } finally { UI.S.ui.sound = was; UI.save(); UI.renderMenu(); }
+    UI.S.ui.sound = true; UI.S.ui.haptics = true; UI.S.ui.hints = true; UI.renderMenu();
+    withSub('mPrefs', function () {
+      var row = document.getElementById('snSound');
+      ok(row, 'в подменю нет «Звук»');
+      ok(row.querySelector('.mi-sw').classList.contains('on'), 'включённый звук без «on»');
+      eq(row.getAttribute('aria-pressed'), 'true', 'aria-pressed');
+      row.click();
+      eq(UI.S.ui.sound, false, 'тумблер не выключил звук');
+      ok(!row.querySelector('.mi-sw').classList.contains('on'), 'выключатель остался включённым');
+      eq(document.getElementById('mPrefsInfo').textContent, 'звук выкл', 'подпись плитки');
+      // вибрация - отдельная настройка, звук её не трогает
+      eq(UI.S.ui.haptics !== false, true, 'звук выключил заодно и вибрацию');
+      ok(document.getElementById('snHaptic').querySelector('.mi-sw').classList.contains('on'), 'выключатель вибрации погас вместе со звуком');
+      row.click();
+      eq(UI.S.ui.sound, true, 'второй тап не включил звук');
+      eq(document.getElementById('mPrefsInfo').textContent, 'всё вкл', 'подпись не вернулась');
+    });
+    // все три выключены - «всё выкл»
+    UI.S.ui.sound = false; UI.S.ui.haptics = false; UI.S.ui.hints = false; UI.renderMenu();
+    eq(document.getElementById('mPrefsInfo').textContent, 'всё выкл', 'подпись при всех выключенных');
+    UI.S.ui.hints = true; UI.renderMenu();
+    eq(document.getElementById('mPrefsInfo').textContent, 'только подсказки', 'подпись при одном включённом');
+    eq(UI.prefsInfo(), 'только подсказки', 'UI.prefsInfo разошлась с плиткой');
+  } finally { UI.S.ui.sound = was; UI.S.ui.haptics = true; UI.S.ui.hints = true; UI.save(); UI.renderMenu(); }
 });
 
 // (18в4) звук: белый список имён и молчание, когда выключено
@@ -783,8 +833,8 @@ add('меню: «О приложении» — суть, список, авто�
   ok(body.textContent.indexOf('Финансовый консультант Алексей Дорохин') >= 0, 'нет строки автора');
   var a = body.querySelector('.ab-contacts .ab-link[data-ext]');
   ok(a && a.tagName === 'A', 'ссылка не ссылка');
-  eq(a.getAttribute('href'), 'https://dorokhin-finance.ru', 'адрес ссылки');
-  eq(a.textContent, 'dorokhin-finance.ru', 'подпись ссылки');
+  eq(a.getAttribute('href'), 'https://www.dorokhin-finance.ru/', 'адрес ссылки');
+  eq(a.textContent, 'dorokhin-finance.ru ↗', 'подпись ссылки');
   ok(body.textContent.indexOf('avdorohin@') < 0 && !body.querySelector('a[href^="mailto:"]'), 'в «О приложении» осталась почта');
   // окно помечено свайпом вниз и своей плотной вёрсткой
   var dlg = document.getElementById('dlg');
@@ -796,12 +846,73 @@ add('меню: «О приложении» — суть, список, авто�
   UI.closeDlg();
 });
 
+// (19-стор) 1.0.3: стор-сборка спрашивает RuStore App Update SDK (подложенный плагин), в сеть
+// не ходит; нашлась версия - точка на плитке и «Обновить», который запускает обновление SDK.
+// Нет RuStore - честное окно. Тест-сборку (как здесь) не трогает: переключатель только на проверку.
+add('обновление (стор): RuStore App Update SDK вместо своего манифеста', function () {
+  var fetched = 0, started = 0, realFetch = window.fetch;
+  var K = Update.K_NEWER, KC = Update.K_CHECK, keep = {};
+  [K, KC].forEach(function (k) { try { keep[k] = localStorage.getItem(k); localStorage.removeItem(k); } catch (e) {} });
+  window.fetch = function () { fetched++; return Promise.reject(new TypeError('Failed to fetch')); };
+  Update._store(true);
+  // «новее» считаем от текущей версии, а не числом: с 1.0.3 код 20007 - уже своя версия
+  var curCode = Update.codeOfVer(window.APP_VERSION), nextCode = curCode + 2, nextVer = Update.verOfCode(nextCode);
+  Update._sdk({
+    checkUpdate: function () { return Promise.resolve({ ok: true, available: true, versionCode: nextCode, currentVersionCode: curCode }); },
+    startUpdate: function () { started++; return Promise.resolve({ ok: true, via: 'sdk' }); }
+  });
+  function restore() {
+    window.fetch = realFetch; Update._store(undefined); Update._sdk(undefined);
+    // «Обновить» помечает уход в окно RuStore (AppLock.away) - как будто вернулись из него,
+    // иначе следующая проверка замка приняла бы свой фон за «своё окно»
+    try { if (window.AppLock && AppLock.onBackground) { AppLock.onBackground(); AppLock.onForeground(); } } catch (e) {}
+    [K, KC].forEach(function (k) { try { if (keep[k] === null || keep[k] === undefined) localStorage.removeItem(k); else localStorage.setItem(k, keep[k]); } catch (e) {} });
+    UI.closeDlg(); UI.renderMenu();
+  }
+  return Update.check().then(function (d) {
+    eq(d && d.kind, 'store', 'RuStore не нашёл подложенную версию');
+    eq(fetched, 0, 'стор-сборка полезла в сеть за своим манифестом');
+    var body = document.getElementById('dlgBody').textContent;
+    ok(body.indexOf('Версия ' + nextVer + ' ждёт в RuStore') >= 0, 'в окне нет версии из RuStore: ' + body);
+    ok(document.getElementById('mUpdate').classList.contains('has-upd'), 'точка «есть обновление» на плитке не встала');
+    var upd = document.getElementById('dlgBtns').lastChild;
+    eq(upd.textContent, 'Обновить', 'нет кнопки «Обновить»');
+    upd.click();
+    return new Promise(function (r) { setTimeout(r, 30); });
+  }).then(function () {
+    eq(started, 1, '«Обновить» не запустил обновление через RuStore');
+    Update._sdk({ checkUpdate: function () { return Promise.resolve({ ok: false, reason: 'no-rustore' }); } });
+    return Update.check();
+  }).then(function (d) {
+    eq(d && d.kind, 'error', 'нет RuStore - не ошибка');
+    ok(document.getElementById('dlgBody').textContent.indexOf('нет приложения RuStore') >= 0, 'нет честной строки про RuStore');
+    eq(fetched, 0, 'после отказа RuStore стор пошёл в сеть');
+    restore();
+  }, function (e) { restore(); throw e; });
+});
+
+// (CSP) 1.0.3: в index.html одна политика; свои файлы читаются (files.json - опись сборки).
+// Что чужое закрыто, проверяет tests/csp-store.test.js (здесь проба дала бы нарушение). В стор-сборке connect-src 'none' вшивает build-lib.js shipCsp.
+add('CSP: своя политика стоит, свои файлы читаются', function () {
+  var metas = document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]');
+  eq(metas.length, 1, 'мета-тегов CSP не один');
+  var c = metas[0].getAttribute('content');
+  ok(/connect-src 'self' https:\/\/www\.dorokhin-finance\.ru/.test(c), 'в CSP превью нет своих файлов и сайта: ' + c);
+  ok(/object-src 'none'/.test(c), 'object-src не закрыт');
+  return fetch('files.json', { cache: 'no-store' }).then(function (r) {
+    ok(r && r.ok, 'files.json не прочитался под CSP');
+    return r.json();
+  }).then(function (j) {
+    ok(j && Array.isArray(j.files) && j.files.length > 5, 'files.json пустой');
+  });
+});
+
 // (19) «Обновление»: окно «установлена версия» → «Проверить» с подставным сервером.
 // Настоящая сеть не трогается — fetch подсовываем свой.
 add('обновление: окно с подставным манифестом', function () {
   var manifest = {
     version: '9.9.9',
-    apkUrl: 'https://dorokhin-finance.ru/homyak/homyak-9.9.9.apk',
+    apkUrl: 'https://www.dorokhin-finance.ru/homyak/homyak-9.9.9.apk',
     size: 3120000,
     notes: 'новая версия для проверки'
   };
@@ -871,10 +982,10 @@ add('обновление: бесшовное, переустановка и «�
   var mine = UI.appVersion();
   function manifest(o) {
     return JSON.stringify({
-      version: o.apk, apkUrl: 'https://dorokhin-finance.ru/homyak/homyak-' + o.apk + '.apk',
+      version: o.apk, apkUrl: 'https://www.dorokhin-finance.ru/homyak/homyak-' + o.apk + '.apk',
       size: 3120000, notes: 'что нового в сборке',
       web: o.web ? {
-        version: o.web, url: 'https://dorokhin-finance.ru/homyak/www-' + o.web + '.zip',
+        version: o.web, url: 'https://www.dorokhin-finance.ru/homyak/www-' + o.web + '.zip',
         sha256: SHA, size: 524288, minShell: o.minShell || '0'
       } : undefined
     });
@@ -979,8 +1090,8 @@ add('обновление: сломавшаяся версия второй ра
   try { was = localStorage.getItem(K); } catch (e) {}
   var sha = new Array(65).join('a');
   var m = Update.parseManifest({
-    version: UI.shellVersion(), apkUrl: 'https://dorokhin-finance.ru/homyak/h.apk', size: 1, notes: '',
-    web: { version: '9.9.9', url: 'https://dorokhin-finance.ru/homyak/www-9.9.9.zip',
+    version: UI.shellVersion(), apkUrl: 'https://www.dorokhin-finance.ru/homyak/h.apk', size: 1, notes: '',
+    web: { version: '9.9.9', url: 'https://www.dorokhin-finance.ru/homyak/www-9.9.9.zip',
            sha256: sha, size: 100, minShell: '0' }
   });
   try {
@@ -990,8 +1101,8 @@ add('обновление: сломавшаяся версия второй ра
       'сломавшуюся версию предлагают снова');
     // перевыложили тот же номер другим архивом - можно пробовать
     var m2 = Update.parseManifest({
-      version: UI.shellVersion(), apkUrl: 'https://dorokhin-finance.ru/homyak/h.apk', size: 1, notes: '',
-      web: { version: '9.9.9', url: 'https://dorokhin-finance.ru/homyak/www-9.9.9.zip',
+      version: UI.shellVersion(), apkUrl: 'https://www.dorokhin-finance.ru/homyak/h.apk', size: 1, notes: '',
+      web: { version: '9.9.9', url: 'https://www.dorokhin-finance.ru/homyak/www-9.9.9.zip',
              sha256: new Array(65).join('b'), size: 100, minShell: '0' }
     });
     eq(Update.decide(m2, UI.appVersion(), UI.shellVersion(), Update.readFail()).kind, 'ota',
@@ -1264,7 +1375,7 @@ add('доходы: под плиткой строка плана месяца', 
   if (!(plan > 0)) { ok(true, 'у первого источника нет плана в демо — проверять нечего'); return; }
   var el = t.querySelector('.cplan');
   ok(el, 'у плитки дохода нет строки плана');
-  eq(el.textContent, UI.fmt(plan) + ' ₽', 'строка плана');
+  eq(el.textContent, UI.fmt(plan) + '\u00a0₽', 'строка плана');
   ok(getComputedStyle(el).display !== 'none', 'строка плана спрятана стилем');
   var s = Engine.summary(S, ymStr);
   var sum = 0;
@@ -1942,7 +2053,7 @@ add('правка операции: калькулятор + − × ÷ = на э
     op('+'); type('50'); op('×'); type('2');
     eq(inp.value, '100+50×2', 'знаки встали не на место');
     ok(!$('etRes').hidden, 'строка итога спрятана при выражении');
-    eq($('etRes').textContent.replace(/[\s  ]/g, ''), '=200₽', 'итог: умножение раньше сложения');
+    eq($('etRes').textContent.replace(/[\s\u00a0 ]/g, ''), '=200₽', 'итог: умножение раньше сложения');
     op('×');                                       // второй знак подряд меняет первый
     eq(inp.value, '100+50×2×', 'знак после числа');
     op('÷');
@@ -2093,8 +2204,8 @@ add('звук: за планом каждый расход звучит пере
 
 // (20б) меню закрывается смахиванием откуда угодно, а не только с шапки
 add('меню: смахивание влево работает с плитки, вертикаль не закрывает', function () {
-  var tile = document.getElementById('mSound');
-  ok(tile, 'нет плитки «Звук»');
+  var tile = document.getElementById('mPrefs');
+  ok(tile, 'нет плитки «Звук и подсказки»');
 
   // порог: горизонталь должна быть в полтора раза длиннее вертикали
   eq(Engine.SWIPE_RATIO, 1.5, 'порог намерения');
@@ -2117,20 +2228,20 @@ add('меню: смахивание влево работает с плитки,
     for (var i = 1; i <= 4; i++) pev(document, 'pointermove', p.x - 35 * i, p.y + 4, false);
     ok(!UI.overlayFlags().menu, 'смахивание с плитки не закрыло меню');
 
-    // 3) клик, прилетевший следом за смахиванием, плитку не нажимает
-    var was = UI.S.ui.sound;
+    // 3) клик, прилетевший следом за смахиванием, плитку не нажимает (подменю не открылось)
     tile.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-    eq(UI.S.ui.sound, was, 'смахивание заодно нажало плитку меню');
+    ok(document.getElementById('dlg').hidden, 'смахивание заодно нажало плитку меню');
     pev(document, 'pointerup', p.x - 140, p.y + 4, true);
 
-    // 4) обычный тап по плитке по-прежнему работает
+    // 4) обычный тап по плитке по-прежнему работает: открывает подменю поверх меню
     UI.openMenu();
     pev(tile, 'pointerdown', p.x, p.y, false);
     pev(document, 'pointerup', p.x, p.y, true);
     tile.click();
-    eq(UI.S.ui.sound, !was, 'тап по плитке перестал переключать звук');
-    tile.click();                                   // возвращаем как было
-    eq(UI.S.ui.sound, was, 'не вернулось прежнее значение');
+    ok(!document.getElementById('dlg').hidden, 'тап по плитке перестал открывать подменю');
+    eq(document.getElementById('dlgTitle').textContent, 'Звук и подсказки', 'открылось не то подменю');
+    ok(UI.overlayFlags().menu, 'подменю закрыло меню');
+    UI.closeDlg();
     UI.closeMenu();
     UI.save();
   });
@@ -2793,9 +2904,9 @@ add('лента: дни, строки и подвал совпадают с ра
       eq(d.querySelector('.fd-h').textContent, g.label, 'подпись дня ' + g.date);
       var ids = [].map.call(d.querySelectorAll('.txrow'), function (r) { return r.dataset.id; });
       eq(ids.join(','), g.rows.map(function (t) { return t.id; }).join(','), 'порядок строк дня ' + g.date);
-      eq(d.querySelector('.fd-bal').textContent, 'остаток на конец дня ' + UI.fmt(g.balanceEnd) + ' ₽', 'остаток дня ' + g.date);
+      eq(d.querySelector('.fd-bal').textContent, 'остаток на конец дня ' + UI.fmt(g.balanceEnd) + '\u00a0₽', 'остаток дня ' + g.date);
       eq(d.querySelector('.fd-ch').textContent,
-        'изменение ' + (g.change > 0 ? '+' : '') + UI.fmt(g.change) + ' ₽', 'изменение дня ' + g.date);
+        'изменение ' + (g.change > 0 ? '+' : '') + UI.fmt(g.change) + '\u00a0₽', 'изменение дня ' + g.date);
       ok(g.change >= 0 || d.querySelector('.fd-ch').classList.contains('neg'), 'минус не покрашен красным');
       ok(g.change <= 0 || d.querySelector('.fd-ch').classList.contains('pos'), 'плюс не покрашен зелёным');
     }
@@ -2812,7 +2923,7 @@ add('лента: дни, строки и подвал совпадают с ра
     eq(row.querySelector('.fd-n').textContent, UI.catName(t0.catId), 'категория в строке');
     eq(row.querySelector('.fd-w').textContent, UI.walletName(t0.walletId), 'кошелёк в строке');
     var amt = row.querySelector('.txa');
-    eq(amt.textContent, (t0.kind === 'inc' ? '+' : '−') + UI.money(t0.amount) + ' ₽', 'сумма в строке');
+    eq(amt.textContent, (t0.kind === 'inc' ? '+' : '−') + UI.money(t0.amount) + '\u00a0₽', 'сумма в строке');
     ok(amt.classList.contains(t0.kind === 'inc' ? 'pos' : 'neg'), 'сумма не того цвета');
     // пустой месяц говорит об этом словами, а не пустотой
     UI.closeSummary();
@@ -2943,11 +3054,32 @@ add('аналитика 0.4.3: пять карточек, три новых эк
   });
 });
 
-// (24б-3) подпись плитки «Бэкап в файл» — «сохранить данные»
-add('меню: у «Бэкап в файл» подпись «сохранить данные»', function () {
-  var s = document.querySelector('#mBackup .mi-s');
-  ok(s, 'нет плитки «Бэкап в файл»');
-  eq(s.textContent, 'сохранить данные', 'подпись «Бэкап» не та');
+// (24б-3) 1.0.3: «Копия данных» - подменю: сохранить, восстановить, напоминание. Кнопки
+// зовут те же Backup.backup / Backup.pickRestore, что раньше стояли на плитках.
+add('меню: «Копия данных» - сохранить, восстановить, тумблер напоминания', function () {
+  var s = document.querySelector('#mCopy .mi-s');
+  ok(s, 'нет плитки «Копия данных»');
+  eq(s.textContent, 'сохранить, восстановить', 'подпись «Копия данных» не та');
+  var b0 = Backup.backup, r0 = Backup.pickRestore, calls = [];
+  Backup.backup = function () { calls.push('save'); };
+  Backup.pickRestore = function () { calls.push('restore'); };
+  try {
+    ok(typeof r0 === 'function', 'нет Backup.pickRestore');
+    withSub('mCopy', function () {
+      eq(document.getElementById('dlgTitle').textContent, 'Копия данных', 'заголовок подменю');
+      eq(document.getElementById('cpSave').textContent, 'Сохранить копию в файл', 'кнопка сохранения');
+      eq(document.getElementById('cpRestore').textContent, 'Восстановить из файла', 'кнопка восстановления');
+      ok(document.getElementById('cpRemind'), 'нет тумблера «Напоминать раз в месяц»');
+      ok(/Напоминать раз в месяц/.test(document.getElementById('cpRemind').textContent), 'подпись тумблера');
+      document.getElementById('cpSave').click();
+      eq(calls.join(','), 'save', '«Сохранить копию в файл» не позвал backup()');
+      ok(document.getElementById('dlg').hidden && !UI.overlayFlags().menu, 'перед сохранением окно и меню не закрылись');
+    });
+    withSub('mCopy', function () {
+      document.getElementById('cpRestore').click();
+      eq(calls.join(','), 'save,restore', '«Восстановить из файла» не позвал pickRestore()');
+    });
+  } finally { Backup.backup = b0; Backup.pickRestore = r0; }
 });
 
 // (24в) тап по строке ленты открывает ту же форму правки, что и свайп вправо
@@ -3048,12 +3180,12 @@ add('0.4.2: подписи, сетка меню, нижний зазор, пла
   // 2. плитка «О приложении» — половинная (не во всю ширину) с новой подписью
   var ab = document.getElementById('mAbout');
   ok(ab && !ab.classList.contains('wide'), 'плитка «О приложении» осталась во всю ширину');
-  eq(ab.querySelector('.mi-s').textContent.trim(), 'Как пользоваться, автор', 'подпись плитки «О приложении»');
+  eq(ab.querySelector('.mi-s').textContent.trim(), 'помощь и автор', 'подпись плитки «О приложении»');
 
   // 3. порядок плиток меню: ровно как задал хозяин, парами, без пустой ячейки
   var ids = [].map.call(document.querySelectorAll('#menu .menu-list .mi'), function (b) { return b.id; });
   eq(ids.join(','),
-    'mTheme,mUpdate,mCats,mWallets,mSound,mHaptic,mHints,mAbout,mBackup,mRestore',
+    MENU_ORDER.join(','),
     'порядок плиток меню');
   eq(ids.length % 2, 0, 'нечётное число плиток — будет пустая половина');
 
@@ -3097,13 +3229,13 @@ add('подсказки: главная на месте, в карточке —
     // главная подсказка видна и говорит про перенос, а не про свайп по строке
     var mh = document.getElementById('mainHint');
     ok(mh && !mh.hidden, 'главная подсказка не показана');
-    ok(mh.textContent.indexOf('веди пальцем') >= 0, 'главная подсказка не про перенос');
+    ok(mh.textContent.indexOf('ведите пальцем') >= 0, 'главная подсказка не про перенос');
     // карточка кошелька: подсказка про свайп по строке, НЕ про «подними и неси»
     var w = circle('wallet', 0);
     UI.openCard({ kind: 'wallet', id: w.dataset.id });
     var ch = document.getElementById('cardHint');
     var ht = ch.querySelector('.sh-ht').textContent;
-    ok(ht.indexOf('Потяни строку') >= 0, 'в карточке кошелька не подсказка про свайп: ' + ht);
+    ok(ht.indexOf('Потяните строку') >= 0, 'в карточке кошелька не подсказка про свайп: ' + ht);
     ok(ht.indexOf('неси') < 0, 'в карточке кошелька осталась подсказка про перенос');
     UI.closeCard();
   } finally {
@@ -3120,14 +3252,16 @@ add('подсказки: выключатель в меню прячет их и
   try {
     UI.S.ui.hints = true; UI.S.ui.hintsDismissed = {}; UI.save(); UI.render();
     ok(!document.getElementById('mainHint').hidden, 'при вкл. подсказках главной нет');
-    UI.openMenu();
-    ok(document.getElementById('mHints'), 'нет плитки «Подсказки»');
-    ok(document.getElementById('mHintsSw').classList.contains('on'), 'выключатель подсказок не «вкл»');
-    eq(document.getElementById('mHintsInfo').textContent, 'вкл', 'подпись подсказок не «вкл»');
-    document.getElementById('mHints').click();     // выключаем
-    eq(UI.S.ui.hints, false, 'подсказки не выключились');
-    eq(document.getElementById('mHintsInfo').textContent, 'выкл', 'подпись не «выкл»');
-    UI.closeMenu(); UI.render();
+    withSub('mPrefs', function () {
+      var row = document.getElementById('snHints');
+      ok(row, 'нет тумблера «Подсказки» в подменю');
+      ok(row.querySelector('.mi-sw').classList.contains('on'), 'выключатель подсказок не «вкл»');
+      row.click();     // выключаем
+      eq(UI.S.ui.hints, false, 'подсказки не выключились');
+      eq(row.getAttribute('aria-pressed'), 'false', 'aria-pressed не «false»');
+      eq(document.getElementById('mPrefsInfo').textContent, 'подсказки выкл', 'подпись плитки после выключения подсказок');
+    });
+    UI.render();
     ok(document.getElementById('mainHint').hidden, 'при выкл. подсказках главная осталась');
     var w = circle('wallet', 0);
     UI.openCard({ kind: 'wallet', id: w.dataset.id });
@@ -3177,7 +3311,7 @@ add('подсказки: очередь на главном (mainDrag → fill �
     var mh = document.getElementById('mainHint');
     function txt() { return mh.querySelector('.mh-t').textContent; }
     ok(!mh.hidden, 'на старте главной подсказки нет');
-    ok(txt().indexOf('веди пальцем') >= 0, 'первой в очереди должна быть mainDrag');
+    ok(txt().indexOf('ведите пальцем') >= 0, 'первой в очереди должна быть mainDrag');
     var hasColor = !!document.querySelector('#app .circle[data-kind="exp"] .ring.lvl-ok,' +
       '#app .circle[data-kind="exp"] .ring.lvl-warn,#app .circle[data-kind="exp"] .ring.lvl-over');
     UI.dismissHint('mainDrag'); UI.render();
@@ -3246,7 +3380,7 @@ add('подсказки: в режиме правки про перестано�
     UI.enterEdit();
     var el = document.getElementById('editHint');
     ok(el && !el.hidden, 'в режиме правки подсказки нет');
-    ok(el.textContent.indexOf('Перетаскивай') >= 0, 'текст подсказки правки не тот');
+    ok(el.textContent.indexOf('Перетаскивайте') >= 0, 'текст подсказки правки не тот');
     UI.dismissHint('edit'); UI.exitEdit();
     UI.enterEdit();
     ok(document.getElementById('editHint').hidden, 'погашенная подсказка правки вернулась');
@@ -3340,6 +3474,267 @@ add('меню: плитки читаются на фоне (контраст в 
     ok(tileBg !== menuBg, 'в светлой теме фон плитки совпал с фоном меню: ' + tileBg);
   }
   UI.closeMenu();
+});
+
+// ---------- 1.0.3: замок, окно оценки, напоминание о копии ----------
+// Проверки через экран: что видно поверх данных, какие окна появились, какие нет.
+function lockEl() { return document.getElementById('lock'); }
+function lockDotsOn() { return document.querySelectorAll('#lockDots i.on').length; }
+function lockType(pin) {
+  pin.split('').forEach(function (d) {
+    var b = document.querySelector('#lockPad [data-k="' + d + '"]');
+    if (b && !b.disabled) b.click();
+  });
+  // проверка кода асинхронная (PBKDF2): ждём, пока точки сбросятся или замок уйдёт
+  return waitFor(function () { return lockEl().hidden || lockDotsOn() === 0; }, 4000);
+}
+function withLockKey(fn) {
+  var saved = null;
+  try { saved = localStorage.getItem(AppLock.KEY); } catch (e) {}
+  function restore() {
+    AppLock._disable();
+    try { if (saved !== null) localStorage.setItem(AppLock.KEY, saved); } catch (e) {}
+  }
+  return Promise.resolve().then(fn).then(function (v) { restore(); return v; }, function (e) { restore(); throw e; });
+}
+
+add('1.0.3 замок: экран закрывает данные, 5 неверных - пауза, верный код открывает', function () {
+  return withLockKey(function () {
+    return AppLock._enable('1357', false).then(function () {
+      AppLock.lockNow();
+      var el = lockEl();
+      ok(!el.hidden && AppLock.isLocked(), 'экран замка не показан');
+      var r = el.getBoundingClientRect();
+      ok(r.width >= window.innerWidth - 1 && r.height >= window.innerHeight - 1, 'замок не на весь экран');
+      var sp = document.getElementById('sumSpent').getBoundingClientRect();
+      var hit = withoutPanel(function () { return document.elementFromPoint(sp.left + sp.width / 2, sp.top + sp.height / 2); });
+      ok(hit && el.contains(hit), 'под замком видно «Потрачено»: ' + (hit && (hit.id || hit.className)));
+      var bg = getComputedStyle(el).backgroundColor;
+      ok(bg !== 'transparent' && !/rgba\([^)]*,\s*0\)$/.test(bg), 'фон замка прозрачный: ' + bg);
+      ok(!!document.querySelector('#lockPad [data-k="0"]'), 'нет клавиатуры кода');
+      ok(localStorage.getItem(AppLock.KEY).indexOf('1357') < 0, 'код лежит открытым текстом');
+      var chain = Promise.resolve();
+      for (var i = 0; i < 5; i++) chain = chain.then(function () { return lockType('0000'); });
+      return chain.then(function () {
+        ok(!el.hidden, 'неверный код открыл приложение');
+        ok(/Подождите 30 с/.test(document.getElementById('lockMsg').textContent),
+          'после 5 неверных нет паузы: ' + document.getElementById('lockMsg').textContent);
+        ok(document.querySelector('#lockPad [data-k="1"]').disabled, 'во время паузы клавиши живые');
+        AppLock._unlockState();                 // как будто 30 секунд прошли
+        return lockType('1357');
+      }).then(function () {
+        ok(el.hidden && !AppLock.isLocked(), 'верный код не открыл приложение');
+        ok(!document.body.classList.contains('locked'), 'метка locked осталась');
+      });
+    });
+  });
+});
+
+add('1.0.3 замок: после фона - шторка; меньше минуты - без кода, минута - код; своё окно - не запираем', function () {
+  return withLockKey(function () {
+    return AppLock._enable('2468', false).then(function () {
+      var el = lockEl();
+      AppLock._bgAt(0);
+      AppLock.onBackground();
+      ok(!el.hidden && AppLock.isCovered(), 'в фоне данные не закрыты шторкой');
+      var pad = document.getElementById('lockPad');
+      ok(pad.getBoundingClientRect().height === 0, 'на шторке видна клавиатура');
+      AppLock._bgAt(Date.now() - 30000);
+      AppLock.onForeground();
+      ok(el.hidden && !AppLock.isLocked(), '30 с в фоне - не должно запирать');
+      AppLock.onBackground();
+      AppLock._bgAt(Date.now() - 61000);
+      AppLock.onForeground();
+      ok(!el.hidden && AppLock.isLocked(), 'минута в фоне - должен быть замок');
+      ok(pad.getBoundingClientRect().height > 0, 'на замке нет клавиатуры');
+      return lockType('2468').then(function () {
+        ok(el.hidden, 'код не открыл');
+        AppLock._bgAt(0);
+        AppLock.away();                       // своё системное окно (сохранение файла и т.п.)
+        AppLock.onBackground();
+        ok(el.hidden, 'своё системное окно - шторка не нужна');
+        AppLock._bgAt(Date.now() - 120000);
+        AppLock.onForeground();
+        ok(el.hidden && !AppLock.isLocked(), 'после своего окна запирать нельзя');
+        // метка одноразовая: следующий уход на 2 минуты без своего окна - замок
+        AppLock.onBackground();
+        AppLock._bgAt(Date.now() - 120000);
+        AppLock.onForeground();
+        ok(!el.hidden && AppLock.isLocked(), 'метка своего окна сработала второй раз');
+        // 9 (ревью 1.0.3): под замком приложение inert, ничего не фокусируется
+        var app = document.getElementById('app');
+        ok(app.inert === true && app.getAttribute('aria-hidden') === 'true', 'под замком #app не inert');
+        return lockType('2468');
+      }).then(function () {
+        ok(el.hidden && document.getElementById('app').inert === false, 'после входа #app остался inert');
+        // ревью 1.0.3: из своего окна ушли надолго (дольше AWAY_MAX) - запираем
+        AppLock.away();
+        AppLock.onBackground();
+        AppLock._bgAt(Date.now() - Guards.LOCK.AWAY_MAX - 1000);
+        AppLock.onForeground();
+        ok(!el.hidden && AppLock.isLocked(), 'ушёл из окна сохранения надолго - замка нет');
+      });
+    });
+  });
+});
+
+add('1.0.3 замок: «Забыли код?» без отпечатка честно говорит про переустановку', function () {
+  return withLockKey(function () {
+    return AppLock._enable('1111', false).then(function () {
+      AppLock.lockNow();
+      document.getElementById('lockForgot').click();
+      var sh = document.getElementById('lockSheet');
+      ok(!sh.hidden && sh.getBoundingClientRect().height > 0, 'панель «Забыли код?» не видна');
+      var t = sh.textContent;
+      ok(/переустановк/.test(t) && /удалятся/.test(t), 'нет честного объяснения: ' + t);
+      ok(/меню → «Копия данных» → «Восстановить из файла»/.test(t), 'нет подсказки про копию (новый путь)');
+      ok(document.getElementById('dlg').hidden, 'вылезло обычное окно поверх/под замком');
+      sh.querySelector('.btn').click();
+      ok(sh.hidden, 'панель не закрылась');
+    });
+  });
+});
+
+add('1.0.3 замок: плитка меню, честный текст, код задаётся дважды через экран', function () {
+  return withLockKey(function () {
+    AppLock._disable();
+    UI.renderMenu();
+    eq(document.getElementById('mLockInfo').textContent, 'выкл', 'по умолчанию замок выключен');
+    UI.openMenu();
+    document.getElementById('mLock').click();
+    var dlg = document.getElementById('dlg');
+    ok(!dlg.hidden, 'окно настройки не открылось');
+    eq(document.getElementById('dlgTitle').textContent, 'Защита входа', 'заголовок окна');
+    ok(/не шифрует/.test(document.getElementById('dlgBody').textContent), 'нет честного «не шифрует»');
+    UI.closeDlg();
+    AppLock._setupPin(false, false);
+    function press(pin) {
+      pin.split('').forEach(function (d) { document.querySelector('#pinPad [data-k="' + d + '"]').click(); });
+    }
+    eq(document.getElementById('dlgTitle').textContent, 'Придумайте код', 'первый шаг');
+    press('2580');
+    return waitFor(function () { return document.getElementById('dlgTitle').textContent === 'Повторите код'; }, 2000).then(function (s) {
+      ok(s, 'нет шага «Повторите код»');
+      press('2580');
+      return waitFor(function () { return AppLock.isOn() && dlg.hidden; }, 4000);
+    }).then(function (on) {
+      ok(on, 'код не включился');
+      ok(/Защита входа включена/.test(document.getElementById('toastText').textContent), 'нет тоста о включении');
+      UI.renderMenu();
+      eq(document.getElementById('mLockInfo').textContent, 'вкл', 'подпись плитки');
+      ok(localStorage.getItem(AppLock.KEY).indexOf('2580') < 0, 'код лежит открытым текстом');
+      UI.hideToast();
+    });
+  });
+});
+
+add('1.0.3 оценка: после 20-й операции на 7-й день - один вызов RuStore, без своих окон', function () {
+  var saved = null;
+  try { saved = localStorage.getItem(Nudges.RKEY); localStorage.removeItem(Nudges.RKEY); } catch (e) {}
+  var snapS = JSON.stringify(UI.S);
+  var calls = 0, answer = { shown: false, code: 'NOT_INSTALLED' };
+  Nudges._plugin({ requestAndLaunch: function () { calls++; return Promise.resolve(answer); } });
+  var w = UI.S.wallets.filter(function (x) { return !x.hidden; })[0];
+  var c = Engine.listCategories(UI.S, 'exp', { ymStr: UI.curYM() })[0];
+  var first = Date.now() - 8 * 86400000;
+  UI.S.tx = [];
+  for (var i = 0; i < 18; i++) UI.S.tx.push({ id: 'rv' + i, kind: 'exp', amount: 10, date: Engine.today(), ts: first + i, catId: c.id, walletId: w.id });
+  UI.save(); UI.render();
+  function saveOp() {
+    UI.openAmount({ kind: 'exp', catId: c.id, walletId: w.id });
+    document.querySelector('#amKeys .amk[data-k="5"]').click();
+    document.getElementById('amConfirm').click();
+  }
+  function done() {
+    Nudges._plugin(null);
+    try { if (saved !== null) localStorage.setItem(Nudges.RKEY, saved); else localStorage.removeItem(Nudges.RKEY); } catch (e) {}
+    UI.S = Engine.migrate(JSON.parse(snapS)); UI.save(); UI.renderInstant(); UI.hideToast();
+  }
+  saveOp();                                             // 18 + одна запись = 19: рано
+  return sleep(150).then(function () {
+    eq(UI.S.tx.length, 19, 'операция не записалась через экран суммы');
+    eq(calls, 0, '19 операций - окно звать рано');
+    saveOp();                                           // 20-я
+    return waitFor(function () { return calls === 1; }, 2000);
+  }).then(function () {
+    eq(calls, 1, 'после 20-й операции окно не позвали');
+    return sleep(100);
+  }).then(function () {
+    ok(document.getElementById('dlg').hidden, 'своё окно поверх (запрещено правилами RuStore)');
+    ok(!/оцен/i.test(document.getElementById('toastText').textContent), 'свой тост про оценку');
+    var st = JSON.parse(localStorage.getItem(Nudges.RKEY));
+    ok(st && st.retryAt > Date.now() + 59 * 86400000 && !st.done, '«не показано» - повтор через 60 дней: ' + JSON.stringify(st));
+    saveOp();
+    return sleep(150);
+  }).then(function () {
+    eq(calls, 1, 'спросили второй раз раньше 60 дней');
+    var st = JSON.parse(localStorage.getItem(Nudges.RKEY)); st.retryAt = Date.now() - 1;
+    localStorage.setItem(Nudges.RKEY, JSON.stringify(st));
+    answer = { shown: true };
+    saveOp();
+    return waitFor(function () { return calls === 2; }, 2000);
+  }).then(function () {
+    eq(calls, 2, 'повтор через 60 дней не случился');
+    return sleep(100);
+  }).then(function () {
+    var st = JSON.parse(localStorage.getItem(Nudges.RKEY));
+    ok(st.done, 'после показа окна флаг «больше не спрашивать» не встал');
+    saveOp();
+    return sleep(150);
+  }).then(function () {
+    eq(calls, 2, 'после показа спросили ещё раз');
+    done();
+  }, function (e) { done(); throw e; });
+});
+
+add('1.0.3 копия: карточка раз в месяц, «Позже» - до следующего месяца, не новичку и не в демо', function () {
+  var key = Nudges.BKEY, saved = null;
+  try { saved = localStorage.getItem(key); localStorage.removeItem(key); } catch (e) {}
+  var el = document.getElementById('remind');
+  function restore() {
+    Nudges.hideRemind();
+    try { if (saved !== null) localStorage.setItem(key, saved); else localStorage.removeItem(key); } catch (e) {}
+    UI.renderMenu(); UI.hideToast();
+  }
+  try {
+    Nudges.hideRemind();
+    ok(!Nudges.checkRemind() && el.hidden, 'в демо карточка не нужна');
+    ok(Nudges.checkRemind({ demo: false, txCount: 50 }), 'карточка не показалась');
+    // въезд сверху (toastDown) доигрываем сразу, иначе замер ловит середину анимации
+    if (el.getAnimations) el.getAnimations().forEach(function (an) { try { an.finish(); } catch (e) {} });
+    var r = el.getBoundingClientRect();
+    ok(!el.hidden && r.height > 40 && r.top >= 0 && r.bottom <= window.innerHeight, 'карточку не видно на экране: ' + JSON.stringify({ h: el.hidden, top: Math.round(r.top), b: Math.round(r.bottom), H: r.height, wh: window.innerHeight }));
+    // ревью 1.0.3: карточка не на шапке «Потрачено» и ниже любого слоя (меню, окна)
+    var sp = document.getElementById('sumSpent').getBoundingClientRect();
+    ok(r.top >= sp.bottom || r.bottom <= sp.top, 'карточка закрывает «Потрачено»');
+    var zr = +getComputedStyle(el).zIndex, zm = +getComputedStyle(document.getElementById('menuBg')).zIndex;
+    ok(zr < zm, 'карточка выше меню: z ' + zr + ' >= ' + zm);
+    ok(document.getElementById('fabAdd').hidden, 'при карточке виден «плюс» под ней');
+    eq(document.getElementById('remindSave').textContent, 'Сохранить копию', 'кнопка сохранения');
+    eq(document.getElementById('remindLater').textContent, 'Позже', 'кнопка «Позже»');
+    ok(el.textContent.indexOf('—') < 0, 'длинное тире в тексте');
+    document.getElementById('remindLater').click();
+    ok(el.hidden, '«Позже» не убрало карточку');
+    ok(!Nudges.checkRemind({ demo: false, txCount: 50 }), 'после «Позже» в этом месяце снова показали');
+    localStorage.removeItem(key);
+    ok(!Nudges.checkRemind({ demo: false, txCount: 5 }), 'новичку (5 операций) показали');
+    Backup.markBackup();
+    ok(JSON.parse(localStorage.getItem(key)).lastAt > Date.now() - 5000, 'дата копии не запомнилась');
+    ok(!Nudges.checkRemind({ demo: false, txCount: 50 }), 'копию сделали в этом месяце, а карточка есть');
+    localStorage.removeItem(key);
+    withSub('mCopy', function () {
+      var row = document.getElementById('cpRemind');
+      eq(row.getAttribute('aria-pressed'), 'true', 'тумблер напоминания не «вкл»');
+      row.click();
+      eq(row.getAttribute('aria-pressed'), 'false', 'тумблер не выключился');
+      ok(!row.querySelector('.mi-sw').classList.contains('on'), 'выключатель остался включённым');
+      ok(Nudges.remindOff(), 'настройка не выключилась');
+      ok(!Nudges.checkRemind({ demo: false, txCount: 50 }), 'выключено, а показали');
+      row.click();
+      eq(row.getAttribute('aria-pressed'), 'true', 'тумблер не включился');
+      ok(!Nudges.remindOff(), 'настройка не включилась');
+    });
+  } finally { restore(); }
 });
 
 // ---------- прогон ----------

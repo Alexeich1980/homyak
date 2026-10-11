@@ -3,6 +3,7 @@
   "appName": "Хомяк",
   "webDir": "www",
   "android": {
-    "androidScheme": "https"
+    "androidScheme": "https",
+    "backgroundColor": "#0F1F24"
   }
 }

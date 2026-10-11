@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Фон заставки = фон тёмной темы приложения (theme-color в www/index.html). -->
+    <color name="splash_bg">#0F1F24</color>
+</resources>
