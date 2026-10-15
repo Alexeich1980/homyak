@@ -35,6 +35,13 @@ function menuTiles(html) {
   return out;
 }
 
+function notes103() {
+  // заметки 1.0.3 - свой раздел CHANGELOG, а не верхний (с выходом 1.0.4 верхний - 1.0.4)
+  const t = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8').replace(/\r\n/g, '\n');
+  const a = t.indexOf('## 1.0.3\n'); const b = t.indexOf('\n## ', a + 1);
+  return t.slice(a, b < 0 ? undefined : b).split('\n').slice(1).join('\n').trim();
+}
+
 test('меню: ровно 8 плиток в порядке Алексея, с теми названиями', () => {
   const tiles = menuTiles(rd('www/index.html'));
   assert.deepEqual(tiles, ORDER);
@@ -48,7 +55,7 @@ test('меню: старых плиток (звук, вибрация, подс�
       assert.ok(!new RegExp("\\$\\('" + id + "'\\)").test(rd('www/' + f)), f + ' всё ещё ищет #' + id);
     }
   }
-  assert.match(html, /id="mCopyInfo">сохранить, восстановить</, 'подпись «Копия данных»');
+  assert.match(html, /id="mCopyInfo">копия, таблица Excel</, 'подпись «Копия данных»');
 });
 
 test('подменю: тумблеры звук/вибрация/подсказки и копия зовут те же функции', () => {
@@ -78,8 +85,40 @@ test('подменю - окно приложения, без системных 
   const block = ui.slice(a, b);
   assert.ok(a > 0 && b > a);
   assert.ok(!/\b(alert|confirm|prompt)\(/.test(block.replace(/dlg(Alert|Confirm|Prompt)\(/g, '')), 'нативный диалог в подменю');
-  assert.equal((block.match(/openDlg\(/g) || []).length, 2);
-  assert.equal((block.match(/\{ label: 'Закрыть', cls: 'nav' \}/g) || []).length, 2);
+  // openPrefs, openTable («Таблица Excel», 11.10), openCopy
+  assert.equal((block.match(/openDlg\(/g) || []).length, 3);
+  assert.equal((block.match(/\{ label: 'Закрыть', cls: 'nav' \}/g) || []).length, 3);
+});
+
+// 11.10, решение Алексея: «Выгрузить в Excel» и «Загрузить из таблицы» - одна строка
+// «Таблица Excel» в «Копии данных», её окно возвращает в «Копию данных».
+test('«Копия данных»: выгрузка и загрузка - одна строка «Таблица Excel» со своим окном', () => {
+  const ui = rd('www/ui.js');
+  const a = ui.indexOf('function openCopy()'), b = ui.indexOf("$('mPrefs').addEventListener", a);
+  const copy = ui.slice(a, b);
+  assert.ok(a > 0 && b > a);
+  assert.match(copy, /'<div class="set-list set-gap">' \+ tableRowHtml\(\) \+ setRowHtml\('cpRemind'/, 'в «Копии данных» не строка «Таблица Excel» + напоминание');
+  assert.ok(!/excelRowHtml|importRowHtml|undoImportRowHtml|cpExcel|cpImport|cpUndoImport/.test(copy), 'в «Копии данных» остались отдельные строки выгрузки/загрузки/отмены');
+  assert.match(copy, /\$\('cpTable'\)\.addEventListener\('click', openTable\);/);
+  // замок у строки - только если в бесплатной версии нечего отменять (отмена импорта - для всех)
+  assert.match(ui, /actRowHtml\('cpTable', 'c-teal', EXCEL_IC, 'Таблица Excel', 'выгрузить или загрузить', !hasFull\(\) && !lastImport\(\)\)/);
+  const t = ui.slice(ui.indexOf('function openTable()'), a);
+  assert.match(t, /if \(!full && !lastImport\(\)\) \{ if \(window\.UI\.paywall\) window\.UI\.paywall\(openCopy\); return; \}/, 'окно таблицы без замка «Полного доступа»');
+  assert.equal((t.match(/if \(!hasFull\(\)\) \{ dlgOnClose = null; if \(window\.UI\.paywall\) window\.UI\.paywall\(openTable\); return; \}/g) || []).length, 2, 'в бесплатной версии «Выгрузить»/«Загрузить» не закрыты замком');
+  assert.ok(!/paywall/.test(t.slice(t.indexOf("var un = $('tbUndoImport')"))), 'отмена импорта закрыта замком');
+  assert.match(t, /title: 'Таблица Excel'/);
+  assert.match(t, /onClose: openCopy,/, '«назад»/фон не возвращают в «Копию данных»');
+  for (const id of ['tbExport', 'tbImport', 'tbUndoImport']) assert.ok(t.includes("'" + id + "'"), 'в окне таблицы нет #' + id);
+  assert.match(t, /window\.Backup\.exportXlsx\(\)/);
+  assert.match(t, /window\.ImportUI\.pick\(\)/);
+  assert.match(t, /window\.ImportUI\.askUndo\(\)/);
+  // раздел 1.0.4 (пока «в работе» - topNotes его пропускает): пути через «Таблицу Excel»
+  const cl = rd('CHANGELOG.md'), n0 = cl.indexOf('## 1.0.4'), notes = cl.slice(n0, cl.indexOf('\n## ', n0 + 5));
+  assert.ok(n0 > 0, 'в CHANGELOG нет раздела 1.0.4');
+  // текст 1.0.4 согласован владельцем 13.10: путь до окна «Таблица Excel», в нём выгрузка и загрузка
+  assert.match(notes, /меню → «Копия данных» → «Таблица Excel»\./);
+  assert.match(notes, /Выгрузка операций/);
+  assert.match(notes, /Загрузка из таблиц других приложений/);
 });
 
 // старые пути в ВИДИМЫХ текстах: строки JS ('...') и текст разметки, не комментарии
@@ -119,7 +158,7 @@ test('тексты: ни один видимый текст не ведёт по
 });
 
 test('CHANGELOG 1.0.3: новые места напоминания и короткое меню, на «ты», без длинного тире', () => {
-  const notes = L.topNotes(path.join(ROOT, 'CHANGELOG.md'));
+  const notes = notes103();
   assert.match(notes, /меню → «Копия данных» → «Напоминать раз в месяц»/);
   assert.match(notes, /меню → «Защита входа»/);
   assert.match(notes, /Меню стало короче/);

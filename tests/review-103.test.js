@@ -28,9 +28,16 @@ const MIN = 60000, DAY = 86400000;
 
 // ---------- 1. замок: away ----------
 
+function notes103() {
+  // заметки 1.0.3 - свой раздел CHANGELOG, а не верхний (с выходом 1.0.4 верхний - 1.0.4)
+  const t = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8').replace(/\r\n/g, '\n');
+  const a = t.indexOf('## 1.0.3\n'); const b = t.indexOf('\n## ', a + 1);
+  return t.slice(a, b < 0 ? undefined : b).split('\n').slice(1).join('\n').trim();
+}
+
 test('1: away прощает только короткий уход; фон дольше потолка - запираем', () => {
-  assert.ok(G.LOCK.AWAY_MAX >= G.LOCK.BG_MS && G.LOCK.AWAY_MAX <= 5 * MIN, 'потолок AWAY_MAX: ' + G.LOCK.AWAY_MAX);
-  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 2 * MIN, away: true }), false, 'выбирал папку 2 минуты');
+  assert.ok(G.LOCK.AWAY_MAX >= G.LOCK.BG_MS && G.LOCK.AWAY_MAX <= 10 * MIN, 'потолок AWAY_MAX: ' + G.LOCK.AWAY_MAX);
+  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 7 * MIN, away: true }), false, 'выбирал папку 7 минут');
   assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 60 * MIN, away: true }), true, 'ушёл из окна сохранения на час');
   assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + G.LOCK.AWAY_MAX, away: true }), true, 'ровно потолок');
   assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 - 10 * MIN }), true, 'часы назад в фоне - не знаем, сколько прошло');
@@ -84,7 +91,7 @@ test('5: карантин старше 30 дней удаляется, сама�
 test('4: package.json 1.0.3+, верхний раздел CHANGELOG - эта версия, без «—» и без окна оценки', () => {
   const ver = require('../package.json').version;
   assert.ok(L.cmpVer(ver, '1.0.3') >= 0, 'package.json всё ещё ' + ver);
-  const notes = L.topNotes(path.join(ROOT, 'CHANGELOG.md'));
+  const notes = notes103();
   assert.ok(/Защита входа/.test(notes) && /копи/.test(notes), 'в заметках 1.0.3 нет кода на вход и копии');
   assert.ok(!/оценк|отзыв/i.test(notes), 'окно оценки в CHANGELOG не пишем');
   assert.equal(notes.indexOf('—'), -1);
@@ -146,9 +153,7 @@ async function bootShip() {
     if (w) await page.size(w, h);
     await page.goto(url); await waitFor(() => page.eval('document.readyState==="complete"'), 10000);
     await page.eval(`(function(){localStorage.clear();${setup || ''};return 1})()`);
-    // APP_READY ставит ui.js раньше, чем выполнятся nudges.js/update.js: ждём и конец загрузки страницы
-    // (под нагрузкой полсекунды не хватало - «Nudges is not defined»)
-    await page.goto(url); await waitFor(() => page.eval('!!window.APP_READY && document.readyState === "complete"'), 20000, 'стор-копия нарисовалась'); await sleep(500);
+    await page.goto(url); await waitFor(() => page.eval('!!window.APP_READY && document.readyState === "complete"'), 20000, 'стор-копия нарисовалась')  // ui.js ставит APP_READY раньше nudges.js/update.js; await sleep(500);
   }
   return { dir, edge, page, boot, real, S, done: async () => { await edge.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
 }
@@ -180,9 +185,9 @@ test('1, 6, 7, 8, 9: замок в стор-копии', EDGE, async () => {
     assert.deepEqual(r1, { need: true, locked: true }, 'ушёл из окна сохранения на час - замка нет');
     await page.eval(`AppLock._unlockState(); ['1','2','3','4'].forEach(function(k){document.querySelector('#lockPad [data-k="'+k+'"]').click()})`);
     await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл');
-    // короткое своё окно - не запираем; но флаг одноразовый: следующий уход на 2 мин без away - замок
-    const r2 = JSON.parse(await page.eval(`(function(){ AppLock.away(); AppLock.onBackground(); AppLock._bgAt(Date.now()-2*60000);
-      var a = AppLock.onForeground(); AppLock.onBackground(); AppLock._bgAt(Date.now()-2*60000); var b = AppLock.onForeground();
+    // короткое своё окно - не запираем; но флаг одноразовый: следующий уход на 7 мин без away - замок
+    const r2 = JSON.parse(await page.eval(`(function(){ AppLock.away(); AppLock.onBackground(); AppLock._bgAt(Date.now()-7*60000);
+      var a = AppLock.onForeground(); AppLock.onBackground(); AppLock._bgAt(Date.now()-7*60000); var b = AppLock.onForeground();
       return JSON.stringify({ a: a, b: b }); })()`));
     assert.deepEqual(r2, { a: false, b: true }, 'away сработал не один раз');
     // 6: пауза после 5 неверных - отпечаток остаётся живым и пробуется сам

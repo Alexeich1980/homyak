@@ -219,8 +219,12 @@ function endReorder() {
 }
 
 function commitOrder(field, kind) {
-  var ids = all(field, '.circle').map(function (c) { return c.dataset.id; });
-  if (kind === 'wallet') {
+  // в ленте кошельков стоят и долги (1.0.4): порядок считаем только своего вида
+  var ids = all(field, '.circle[data-kind="' + kind + '"]').map(function (c) { return c.dataset.id; });
+  if (kind === 'debt') {
+    (UI.S.debts || []).forEach(function (d) { if (ids.indexOf(d.id) < 0) ids.push(d.id); });
+    Engine.reorder(UI.S, 'debts', ids);
+  } else if (kind === 'wallet') {
     // скрытые кошельки в DOM не попадают — дописываем их в хвост, иначе order столкнётся
     UI.S.wallets.forEach(function (w) { if (ids.indexOf(w.id) < 0) ids.push(w.id); });
     Engine.reorder(UI.S, 'wallets', ids);
@@ -384,6 +388,7 @@ function colorsHtml(id, cur) {
 function editCircle(o) {
   if (!o || !o.id) return;
   if (o.kind === 'wallet') editWallet(o.id);
+  else if (o.kind === 'debt') { if (UI.editDebt) UI.editDebt(o.id); }
   else if (o.kind === 'inc' || o.kind === 'exp') editCat(o.kind, o.id);
 }
 
@@ -401,8 +406,13 @@ function walletForm(pfx, o) {
       (o.placeholder ? ' placeholder="' + esc(o.placeholder) + '"' : '') + '></div>' +
     '<div class="ef"><span class="lbl">Иконка</span>' + icoRowHtml(pfx + 'Ico', st.icon, 'wc-' + st.color) + '</div>' +
     '<div class="ef"><span class="lbl">Цвет</span>' + colorsHtml(pfx + 'Colors', st.color) + '</div>' +
-    '<div class="ef"><span class="lbl">' + esc(o.balLabel) + '</span>' +
-      '<input class="inp" id="' + pfx + 'Base" type="text" inputmode="decimal" value="' + esc(o.balValue) + '"></div>';
+    // баланс - только при создании; у готового кошелька он правится кнопкой «Изменить баланс»
+    // в карточке, второго места для того же числа нет (дубль убран, Алексей 13.10)
+    (o.balLabel ? '<div class="ef"><span class="lbl">' + esc(o.balLabel) + '</span>' +
+      '<input class="inp" id="' + pfx + 'Base" type="text" inputmode="decimal" value="' + esc(o.balValue) + '"></div>' : '');
+  // 1.0.4: отметка «Кредитная карта» - день платежа и напоминание (debts.js creditForm)
+  st.cr = UI.creditForm ? UI.creditForm(pfx, o.wallet || null) : null;
+  if (st.cr) st.body += st.cr.html;
 
   st.bind = function () {
     var prev = $(pfx + 'Ico'), nameEl = $(pfx + 'Name');
@@ -430,7 +440,8 @@ function walletForm(pfx, o) {
         UI.haptic('light');
       });
     });
-    UI.moneyInput($(pfx + 'Base'));
+    if ($(pfx + 'Base')) UI.moneyInput($(pfx + 'Base'));
+    if (st.cr) st.cr.bind();
   };
   return st;
 }
@@ -439,9 +450,8 @@ function walletForm(pfx, o) {
 function editWallet(id, backToList) {
   var w = Engine.findWallet(UI.S, id);
   if (!w) return;
-  var bal = Engine.walletBalance(UI.S, id);
   var f = walletForm('ec', { name: w.name, icon: w.icon || 'wallet', color: w.color,
-    iconTouched: true, balLabel: 'Баланс, ₽', balValue: Engine.fmt(bal) });
+    iconTouched: true, wallet: w });
   // у скрытого кошелька вместо «Скрыть» - «Показать»: иначе вернуть его после того, как
   // тост «Вернуть» уехал, было негде
   UI.openDlg({
@@ -456,12 +466,11 @@ function editWallet(id, backToList) {
       { label: 'Сохранить', cls: 'primary', onClick: function () {
         var name = String($('ecName').value).trim();
         if (!name) { showErr('ecErr', 'Впишите название'); return false; }
-        var n = num($('ecBase').value);
-        if (isNaN(n)) { showErr('ecErr', 'Баланс - это число'); return false; }
         Engine.updateWallet(UI.S, id, { name: name, icon: f.icon, color: f.color });
-        if (Math.abs(n - bal) > 0.004) Engine.setWalletBase(UI.S, id, n);   // трогаем базу только если правда менял
+        if (f.cr) Engine.setWalletCredit(UI.S, id, f.cr.read());
         UI.save(); UI.render(); UI.haptic('light');
         UI.toast('Кошелёк сохранён');
+        if (UI.debtsChanged) UI.debtsChanged();   // напоминания и баннер кредитки
         if (backToList) { openWallets(); return false; }
       } }
     ],
@@ -508,6 +517,7 @@ function unhideWallet(id, backToList) {
 function deleteWalletFlow(id, backToList) {
   var w = Engine.findWallet(UI.S, id);
   if (!w) return;
+  if (Engine.walletDebtTxCount(UI.S, id)) { debtWalletNoDelete(id, backToList); return; }
   var n = Engine.walletTxCount(UI.S, id);
   var text = n
     ? 'У кошелька «' + w.name + '» ' + n + ' ' + Engine.plural(n, 'операция', 'операции', 'операций') +
@@ -522,8 +532,24 @@ function deleteWalletFlow(id, backToList) {
   });
 }
 
+// 1.0.4: кошелёк с платежами по долгам не удаляется (Engine.deleteWallet бросает 'debt-ops'):
+// вместе с ним ушла бы история долга - сроки, проценты, «выплачено». Предлагаем «Скрыть».
+function debtWalletNoDelete(id, backToList) {
+  var w = Engine.findWallet(UI.S, id);
+  if (!w) return;
+  var why = 'С кошелька «' + w.name + '» платили по долгам - удаление стёрло бы историю платежей по долгу. ';
+  if (w.hidden) { UI.dlgAlert(why + 'Кошелёк уже скрыт: на главном его не видно, история цела.', 'Удалить нельзя'); return; }
+  UI.dlgConfirm({
+    title: 'Удалить нельзя',
+    text: why + 'Скройте кошелёк: он пропадёт с главного экрана и из «В кошельках», история останется.',
+    okLabel: 'Скрыть кошелёк',
+    onOk: function () { hideWallet(id, backToList); }
+  });
+}
+
 function dropWallet(id, backToList) {
-  var r = Engine.deleteWallet(UI.S, id);
+  var r;
+  try { r = Engine.deleteWallet(UI.S, id); } catch (e) { debtWalletNoDelete(id, backToList); return; }
   if (!r) return;
   UI.save(); UI.closeDlg(); UI.render(); UI.haptic('medium');
   UI.toast(r.removed
@@ -562,8 +588,7 @@ function paywall(back) {
   var body =
     '<div class="pw">' +
       '<div class="pw-lead">Полный доступ навсегда - одной покупкой, без подписок.</div>' +
-      '<div class="pw-h">Кошельки и категории - сколько нужно</div>' +
-      '<div class="pw-sub">до ' + Engine.HARD.wallets + ' кошельков и ' + Engine.HARD.expCats + ' категорий</div>' +
+      '<div class="pw-h">Кошельки, категории и долги - сколько нужно</div>' +
       '<div class="pw-h">Вся аналитика:</div>' +
       '<ul class="pw-list">' +
         '<li>сводка месяца</li>' +
@@ -571,7 +596,10 @@ function paywall(back) {
         '<li>тепловая карта трат</li>' +
         '<li>зона внимания</li>' +
         '<li>динамика по месяцам</li>' +
+        '<li>капитал и обязательства</li>' +
       '</ul>' +
+      '<div class="pw-h">Таблица Excel</div>' +
+      '<div class="pw-sub">выгрузка и загрузка из других приложений</div>' +
       '<div class="pw-respect">Покупка поддерживает независимую разработку - без рекламы и подписок.</div>' +
       (pay
         ? '<div class="pw-price"><b id="pwPrice">' + FULL_PRICE + '</b> <span>· один раз, навсегда</span></div>' +
@@ -943,8 +971,10 @@ function addWallet(backToList) {
         var raw = String($('awBase').value).trim();
         var n = raw === '' ? 0 : num(raw);
         if (isNaN(n)) { showErr('awErr', 'Баланс - это число'); return false; }
-        Engine.addWallet(UI.S, { name: name, icon: f.icon, color: f.color, base: n });
+        var nw = Engine.addWallet(UI.S, { name: name, icon: f.icon, color: f.color, base: n });
+        if (f.cr) Engine.setWalletCredit(UI.S, nw.id, f.cr.read());
         UI.save(); UI.render(); UI.haptic('medium');
+        if (UI.debtsChanged) UI.debtsChanged();
         UI.toast('Кошелёк «' + name + '» добавлен');
         if (backToList) { openWallets(); return false; }
       } }
@@ -984,6 +1014,8 @@ function openWallets() {
         off.map(function (w) { return UI.walletTileHtml(w, { off: true }); }).join('') + '</div>';
     }
   }
+  // 1.0.4: долги - тут же, своим блоком; погашенные (архив) свёрнуты
+  if (UI.debtsListHtml) body += UI.debtsListHtml();
 
   UI.openDlg({
     title: 'Кошельки', body: body,
@@ -999,6 +1031,7 @@ function openWallets() {
       $('wlAdd').addEventListener('click', function () { addWallet(true); });
       var f = $('wlFold');
       if (f) f.addEventListener('click', function () { wlFolded = !wlFolded; UI.haptic('light'); openWallets(); });
+      if (UI.bindDebtsList) UI.bindDebtsList();
     }
   });
 }

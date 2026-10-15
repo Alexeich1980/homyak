@@ -236,10 +236,15 @@ test('deeplink RuStore Pay: схема одна в meta-data, intent-filter и �
   const m = rd('android/app/src/main/AndroidManifest.xml');
   const j = rd('android/app/src/main/java/ru/dorokhin/budgetphone/RuStorePayPlugin.java');
   const a = rd('android/app/src/main/java/ru/dorokhin/budgetphone/MainActivity.java');
-  const scheme = (j.match(/PAY_SCHEME = "([^"]+)"/) || [])[1];
-  assert.ok(scheme && /^[a-z][a-z0-9+.-]*$/.test(scheme), 'схема не ASCII/RFC-3986: ' + scheme);
-  assert.ok(new RegExp('android:name="sdk_pay_scheme_value"\\s+android:value="' + scheme.replace(/\./g, '\\.') + '"').test(m), 'meta-data sdk_pay_scheme_value');
-  assert.ok(m.indexOf('<data android:scheme="' + scheme + '" />') > 0, 'intent-filter со схемой');
+  // 12.10: схема = <applicationId>.rustore (тест-сборка - отдельный пакет): в плагине - от имени
+  // пакета, в манифесте - плейсхолдер payScheme из build.gradle, у стора - ru.dorokhin.homyak.rustore
+  const g = rd('android/app/build.gradle');
+  assert.ok(/return c\.getPackageName\(\) \+ "\.rustore";/.test(j), 'плагин: схема не от имени пакета');
+  const scheme = (g.match(/payScheme: homyakTest \? '[^']+' : '([^']+)'/) || [])[1];
+  assert.strictEqual(scheme, 'ru.dorokhin.homyak.rustore', 'стор-схема');
+  assert.ok(/^[a-z][a-z0-9+.-]*$/.test(scheme), 'схема не ASCII/RFC-3986: ' + scheme);
+  assert.ok(/android:name="sdk_pay_scheme_value"\s+android:value="\$\{payScheme\}"/.test(m), 'meta-data sdk_pay_scheme_value');
+  assert.ok(m.indexOf('<data android:scheme="${payScheme}" />') > 0, 'intent-filter со схемой');
   assert.ok(/android:name="console_app_id_value"\s+android:value="@string\/rustore_console_app_id"/.test(m));
   assert.ok(/onNewIntent\(Intent intent\)[\s\S]{0,120}RuStorePayPlugin\.proceedIntent/.test(a));
   assert.ok(/savedInstanceState == null\) RuStorePayPlugin\.proceedIntent/.test(a));
@@ -363,7 +368,11 @@ test('планшет: #app - колонка 480-560px по центру; лис�
   assert.ok(colw >= 480 && colw <= 560, '--colw ' + colw);
   assert.ok(sheetw >= 480 && sheetw <= 600, '--sheetw ' + sheetw);
   assert.ok(/#app \{ width: 100%; max-width: var\(--colw\); margin-inline: auto; \}/.test(css));
-  assert.ok(/#dlg, #icSheet, #trSheet, #card \{ max-width: var\(--sheetw\); margin-inline: auto; \}/.test(css));
+  // Р18 ревью 15.10: окна и листы не шире --sheetw - и свой выбор даты/списка (#pk), на планшете
+  // он стоял во всю ширину. Каждый лист - в правиле с max-width: var(--sheetw) и margin-inline: auto.
+  const sheetRule = (css.match(/([^{}]+)\{ max-width: var\(--sheetw\); margin-inline: auto; \}/) || [])[1] || '';
+  const sel = sheetRule.split(',').map((x) => x.trim());
+  for (const id of ['#dlg', '#icSheet', '#trSheet', '#card', '#pk']) assert.ok(sel.includes(id), id + ' во всю ширину на планшете: ' + sheetRule.trim());
   assert.ok(/#summary, #amount \{ padding-left: var\(--side\); padding-right: var\(--side\); \}/.test(css));
   assert.ok(/\.fab \{ right: max\([^}]*var\(--side\)/.test(css));
 });

@@ -259,10 +259,13 @@ function readVersion(pkgPath) {
 }
 
 // «что нового» для канала обновления — верхний раздел CHANGELOG.md
+// Раздел с пометкой «(в работе)» (1.0.4: следующая версия копится заранее, номер ещё не
+// поднят) пропускаем: в «что нового» уходит последний ВЫПУЩЕННЫЙ раздел. На выпуске
+// пометку снимают вместе с подъёмом версии.
 function topNotes(changelog) {
   if (!fs.existsSync(changelog)) return '';
   const txt = fs.readFileSync(changelog, 'utf8');
-  const m = txt.match(/^##\s+.*$/m);
+  const m = txt.match(/^##\s+(?!.*\(в работе\)\s*$).*$/m);
   if (!m) return '';
   const rest = txt.slice(m.index + m[0].length);
   const end = rest.search(/^##\s+/m);
@@ -424,6 +427,34 @@ function storeOutNames(version, candidate) {
 // Проверяет: assets/public/pay-config.js несёт тот же id; resources.arsc (скомпилированный
 // strings.xml) содержит тот же id; index.html несёт релизные (и стор-) флаги и НЕ несёт
 // reel-флаг; отладочного selftest.js нет. Возвращает сводку, при нарушении - бросает.
+// ---------- имя пакета APK (12.10) ----------
+// Тест-сборка - отдельное приложение (ставится рядом с магазинной), стор и релиз - то самое,
+// что в RuStore. Тест - всё, что не --store/--release (reel - тоже тест).
+const STORE_PACKAGE = 'ru.dorokhin.homyak';
+const TEST_PACKAGE = 'ru.dorokhin.homyak.test';
+function isTestBuild(mode) { return !(mode && mode.release); }
+function expectedPackage(mode) { return isTestBuild(mode) ? TEST_PACKAGE : STORE_PACKAGE; }
+// Пакет из бинарного AndroidManifest.xml APK: строки пула - UTF-16LE или UTF-8. Ищем имя
+// пакета атрибутом package (первая строка пула, равная одному из двух имён, точнее не нужно):
+// у тест-APK есть «ru.dorokhin.homyak.test», у стор-APK его нет нигде в манифесте.
+function apkPackageOf(apkBuf) {
+  const { unzipSync } = require('fflate');
+  const files = unzipSync(new Uint8Array(apkBuf), { filter: (f) => f.name === 'AndroidManifest.xml' });
+  const m = files['AndroidManifest.xml'];
+  if (!m) throw new Error('в APK нет AndroidManifest.xml');
+  const b = Buffer.from(m);
+  const has = (s) => b.indexOf(Buffer.from(s, 'utf16le')) >= 0 || b.indexOf(Buffer.from(s, 'utf8')) >= 0;
+  if (has(TEST_PACKAGE)) return TEST_PACKAGE;
+  if (has(STORE_PACKAGE)) return STORE_PACKAGE;
+  throw new Error('в манифесте APK нет ни ' + STORE_PACKAGE + ', ни ' + TEST_PACKAGE);
+}
+function apkPackageCheck(apkBuf, want) {
+  const got = apkPackageOf(apkBuf);
+  if (got !== want) throw new Error('пакет APK ' + got + ', а нужен ' + want + (want === STORE_PACKAGE
+    ? ' (стор/релиз должен обновлять приложение из RuStore)' : ' (тест-сборка - отдельное приложение «Хомяк тест»)'));
+  return got;
+}
+
 function verifyApk(apkBuf, opts) {
   opts = opts || {};
   const { unzipSync } = require('fflate');
@@ -589,6 +620,7 @@ function checkVersionGate(o) {
 
 module.exports = {
   DEV_ONLY, FLAG_MARKER, CSP_CONNECT_DEV, CSP_CONNECT_NONE, cspOf, shipCsp, rmrf, copyClean, listFiles, makeShip, flagsTag, buildMode,
+  STORE_PACKAGE, TEST_PACKAGE, isTestBuild, expectedPackage, apkPackageOf, apkPackageCheck,
   versionCodeOf, writeFilesJson, zipShip, selfCheckZip, sha256hex, stampWeb, readVersion, topNotes,
   OTA_MTIME, CORE_IN_BUNDLE,
   APP_ID_PLACEHOLDER, validAppId, parseAppIdArg, readAppIdJs, readAppIdXml, stampAppIdJs, stampAppIdXml,

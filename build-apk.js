@@ -331,13 +331,20 @@ say('\n[2/3] Собираю APK (gradlew ' + task + '). Первый раз эт
 // относительное имя: cwd уже android/, абсолютный путь с пробелами/кириллицей под shell:true ненадёжен
 // -PhomyakStore=true → ресурс bool/homyak_store: стор-оболочка на старте забывает путь к
 // скачанной веб-сборке и всегда грузит встроенную (MainActivity) - заслон от самоподмены кода.
-const gradleArgs = [task, '-PhomyakStore=' + (MODE.store && !REEL ? 'true' : 'false')];
+// -PhomyakTest=true → тест-сборка - отдельное приложение ru.dorokhin.homyak.test «Хомяк тест»
+// (рядом с магазинной; L.expectedPackage + L.apkPackageCheck ниже стерегут, что вышло)
+const gradleArgs = [task, '-PhomyakStore=' + (MODE.store && !REEL ? 'true' : 'false'), '-PhomyakTest=' + (L.isTestBuild(MODE) ? 'true' : 'false')];
 r = run('"' + path.join(ANDROID, 'gradlew.bat') + '"', gradleArgs, { cwd: ANDROID });   // полный путь: cmd не ищет .bat в cwd на кириллических путях
 if (!r.ok) die('сборка Gradle упала (' + r.why + '). Смотри текст ошибки выше.');
 
 if (!fs.existsSync(APK_SRC)) {
   die('Gradle отработал, но APK не найден: ' + APK_SRC);
 }
+// имя пакета: стор/релиз - ru.dorokhin.homyak, тест - ru.dorokhin.homyak.test
+try {
+  const pk = L.apkPackageCheck(fs.readFileSync(APK_SRC), L.expectedPackage(MODE));
+  say('Пакет:       ' + pk);
+} catch (e) { die(e.message); }
 
 // --- 3б. самопроверка APK: что вшито, то и лежит в файле -------------------------------
 // Читаем собранный APK как zip: www/pay-config.js из ассетов и resources.arsc (strings.xml).

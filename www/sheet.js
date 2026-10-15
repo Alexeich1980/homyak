@@ -45,6 +45,31 @@ function walletIcon(id) {
 // ctx: {kind:'wallet'|'cat', id, tint} — от чьего лица смотрим
 function txRowHtml(t, ctx) {
   var name, cls, amt, icon, tint;
+  // 1.0.4: операция с долгом в карточке кошелька - имя долга, знак по движению денег
+  if (t.kind === 'debt') {
+    name = (UI.debtName(t.debtId) || 'Долг удалён') + ' · ' + UI.debtOpLabel(t.op === 'take' ? 'debttake' : 'debtpay', t.debtId).toLowerCase();
+    amt = (t.op === 'take' ? '+' : '−') + money(t.amount);
+    // платёж со ставкой: весь платёж одной суммой, разбивка - строкой ниже (как в карточке долга).
+    // В тёмной теме дата - колонкой .txd: в строке остаётся только разбивка (.tx-mdate прячется)
+    var pi = Engine.payInt(t), meta = '<div class="txmeta">' + esc(txDate(t.date)) + '</div>';
+    if (pi > 0) {
+      meta = '<div class="txmeta db-meta tx-split"><span class="tx-mdate">' + esc(txDate(t.date)) + ' · </span>' +
+        esc('в счёт долга ' + money(Engine.debtPart(t)) + '\u00a0₽, проценты ' + money(pi) + '\u00a0₽') + '</div>';
+    }
+    return '<div class="txrow" data-id="' + esc(t.id) + '">' +
+      '<div class="txact edit" aria-hidden="true">Править</div>' +
+      '<div class="txact del" aria-hidden="true">Удалить</div>' +
+      '<div class="txfront">' +
+        '<div class="txico dbt" aria-hidden="true">' + UI.DEBT_GLYPH + '</div>' +
+        '<div class="txd">' + txDate(t.date) + '</div>' +
+        '<div class="txmid">' +
+          '<div class="txn">' + esc(name) + '</div>' +
+          meta +
+        '</div>' +
+        '<div class="txa zero">' + amt + '\u00a0₽</div>' +
+      '</div>' +
+    '</div>';
+  }
   if (t.kind === 'transfer') {
     name = UI.walletName(t.walletId) + ' → ' + UI.walletName(t.toWalletId);
     cls = 'zero';
@@ -81,9 +106,25 @@ function txRowHtml(t, ctx) {
 }
 
 // ---------- отрисовка листа ----------
+// Подсказку про свайп карточка долга ставит внутрь списка (над «Историей»); перед любой
+// перерисовкой узел возвращается на своё место под списком - иначе innerHTML списка его съел бы.
+function homeCardHint() {
+  var h = $('cardHint'), l = $('cardList');
+  if (!h || !l || h.parentNode === l.parentNode) return;
+  h.classList.remove('sh-hint-in');
+  l.parentNode.insertBefore(h, l.nextSibling);
+}
+
 function renderCard() {
   if (!cardOf) return false;
+  homeCardHint();
   var ico = $('cardIco'), list, ctx;
+
+  // 1.0.4: карточка долга целиком рисуется в debts.js (поля того же листа)
+  if (cardOf.kind === 'debt') {
+    if (!UI.renderDebtCard || !UI.renderDebtCard(cardOf.id)) { closeCard(); return false; }
+    return true;
+  }
 
   if (cardOf.kind === 'wallet') {
     var w = Engine.findWallet(UI.S, cardOf.id);
@@ -97,10 +138,10 @@ function renderCard() {
     amt.classList.toggle('neg', bal < 0);
     // «Скрыть» уехало внутрь формы кошелька (там же, где «Удалить»), а на его месте
     // «Настроить» - та же форма, что открывается из списка «Настроить кошельки».
-    // «Перевести» - явный путь к переводу для тех, кто не носит плитки пальцем.
+    // «Перевести» убран (Алексей 14.10): дубль «+» и перетаскивания кошелька на кошелёк.
+    // Лист перевода остался - его открывает тап по напоминанию кредитки (перевод на карту).
     $('cardActs').innerHTML =
       '<button class="btn primary w100" type="button" id="cardBase">Изменить баланс</button>' +
-      '<button class="btn ghost" type="button" id="cardTransfer">Перевести</button>' +
       '<button class="btn ghost" type="button" id="cardSetup">Настроить</button>';
     // операции кошелька за ВЫБРАННЫЙ месяц (как у категории), а не за всю историю:
     // счётчик «N операций» под именем и список показывают один и тот же месяц
@@ -128,14 +169,16 @@ function renderCard() {
     // Статус-строка. Расход: «осталось Y» (Y<0 красным - перерасход). Доход: «осталось до
     // плана Y» / «перевыполнен на Z» (позитив, без красного). Сам лимит/план здесь не
     // повторяем (1.0.3, одно число - одно место): он стоит строкой ниже, рядом с «Изменить».
-    var statusHtml;
-    if (lim == null) statusHtml = isInc ? 'Плана на месяц нет' : 'Лимита на месяц нет';
+    // Плана/лимита нет - статус-строки нет (14.10): строка ниже «План/Лимит на месяц: не задан
+    // [Задать]» говорит то же самое, второй раз не повторяем.
+    var statusHtml = '';
+    if (lim == null) statusHtml = '';
     else if (isInc) statusHtml =
       left > 0 ? 'осталось до плана <b>' + fmt(left) + '\u00a0₽</b>'
       : left < 0 ? 'перевыполнен на <b>' + fmt(-left) + '\u00a0₽</b>'
       : '<b>план выполнен</b>';
     else statusHtml = 'осталось <b class="' + (left < 0 ? 'txa neg' : '') + '">' + fmt(left) + '\u00a0₽</b>';
-    $('cardActs').innerHTML = '<div class="sh-plan">' + statusHtml + '</div>' +
+    $('cardActs').innerHTML = (statusHtml ? '<div class="sh-plan">' + statusHtml + '</div>' : '') +
       // Число-цель правится прямо тут - отдельной строкой-действием. У расхода это «Лимит»,
       // у источника дохода - «План». Переименование и архив остаются в полном редакторе.
       '<div class="sh-icorow sh-limrow"><span class="sh-icol">' + (isInc ? 'План на месяц' : 'Лимит на месяц') + '</span>' +
@@ -178,7 +221,6 @@ function renderCard() {
 
   if (cardOf.kind === 'wallet') {
     $('cardBase').addEventListener('click', walletBaseDlg);
-    $('cardTransfer').addEventListener('click', function () { openTransfer(cardOf.id); });
     $('cardSetup').addEventListener('click', function () {
       var id = cardOf.id;
       closeCard();
@@ -260,13 +302,16 @@ UI.bindSwipeClose($('trSheet').querySelector('.dlg-grip'), 'down', function () {
 
 function openCard(o) {
   if (!o || !o.id) return;
-  if (o.kind !== 'wallet' && o.kind !== 'inc' && o.kind !== 'exp') return;
+  if (o.kind !== 'wallet' && o.kind !== 'inc' && o.kind !== 'exp' && o.kind !== 'debt') return;
   clearTimeout(cardHideTimer); cardHideTimer = null;
   cardOf = { kind: o.kind, id: o.id };
   if (!renderCard()) return;
   $('cardBg').hidden = false;
   var el = $('card');
   el.hidden = false;
+  // с начала списка: прокрутка прошлой карточки прятала свежую операцию за верх (телефон 13.10).
+  // Только после hidden = false: у скрытого списка браузер прокрутку не сбрасывает.
+  $('cardList').scrollTop = 0;
   void el.offsetHeight;                       // reflow: старт анимации от translateY(100%)
   el.classList.add('open');
   UI.haptic('light');
@@ -279,7 +324,8 @@ function closeCard() {
   if (el.hidden) return;
   el.classList.remove('open');
   clearTimeout(cardHideTimer);
-  cardHideTimer = setTimeout(function () { el.hidden = true; $('cardList').innerHTML = ''; }, 260);
+  // подсказку из списка долга - на место до очистки списка, иначе innerHTML её съедал насовсем
+  cardHideTimer = setTimeout(function () { el.hidden = true; homeCardHint(); $('cardList').innerHTML = ''; }, 260);
 }
 
 // смена иконки категории/источника прямо из карточки: тот же лист, что и в форме кошелька
@@ -394,6 +440,12 @@ UI.bindHintSwipe($('cardAdjustHint'), 'adjust', function () {
 
 // ---------- удаление и правка операции ----------
 function txSummary(t) {
+  // 1.0.4: платёж по долгу - весь платёж одной записью (проценты внутри)
+  if (t.debtId && t.kind === 'debt') {
+    var op = t.op === 'take' ? 'debttake' : 'debtpay';
+    return UI.debtOpLabel(op, t.debtId) + ' «' + (UI.debtName(t.debtId) || 'долг') + '» · ' + money(t.amount) + '\u00a0₽ · ' +
+      UI.walletName(t.walletId) + ' · ' + txDate(t.date);
+  }
   var sign = t.kind === 'inc' ? '+' : (t.kind === 'exp' ? '−' : '');
   var who = t.kind === 'transfer'
     ? UI.walletName(t.walletId) + ' → ' + UI.walletName(t.toWalletId)
@@ -407,34 +459,50 @@ function confirmDelTx(id) {
   UI.dlgConfirm({
     title: 'Удалить операцию?', text: txSummary(t), danger: true, okLabel: 'Удалить',
     onOk: function () {
-      Engine.deleteTx(UI.S, id);
+      // Р3 ревью 15.10: операцию долга, после удаления которой остаток стал бы меньше нуля,
+      // движок не удаляет ('over') - своё окно вместо тихой ошибки
+      try { Engine.deleteTx(UI.S, id); } catch (e) {
+        if (!(e && e.message === 'over')) throw e;
+        // окно подтверждения закроется после onOk - отказ показываем следом, своим окном
+        setTimeout(function () { UI.dlgAlert('Нельзя удалить: остаток долга станет меньше нуля. Сначала исправьте более поздние платежи по этому долгу.', 'Не удалилось'); }, 0);
+        return;
+      }
       UI.save(); renderCard(); UI.render(); UI.haptic('medium');
       UI.toast('Операция удалена');
+      if (UI.debtsChanged) UI.debtsChanged();
     }
   });
 }
 
 // Операция без кошелька бывает (walletId: null в старом бэкапе или у удалённого кошелька).
-// Без пустого варианта браузер молча выбирал первый кошелёк, и сохранение вешало
-// операцию на него, сдвинув его баланс.
-function walletOptions(selId) {
+// Без пустого варианта форма молча выбирала бы первый кошелёк, и сохранение вешало
+// операцию на него, сдвинув его баланс. Список - своё окно (picker.js), не системное.
+function walletItems(selId) {
   var known = UI.S.wallets.some(function (w) { return w.id === selId; });
-  var head = known ? '' : '<option value="" selected>- не выбран -</option>';
-  return head + UI.S.wallets.filter(function (w) { return !w.hidden || w.id === selId; })
+  var head = known ? [] : [{ value: '', label: '- не выбран -' }];
+  return head.concat(UI.S.wallets.filter(function (w) { return !w.hidden || w.id === selId; })
     .sort(function (a, b) { return a.order - b.order; })
-    .map(function (w) {
-      return '<option value="' + esc(w.id) + '"' + (w.id === selId ? ' selected' : '') + '>' + esc(w.name) + '</option>';
-    }).join('');
+    .map(function (w) { return { value: w.id, label: w.name }; }));
+}
+function walletField(id, selId, title) {
+  var known = UI.S.wallets.some(function (w) { return w.id === selId; });
+  return Picker.listField({ id: id, items: walletItems(selId), value: known ? selId : '', title: title });
 }
 
-function editTx(id) {
+// pre - введённое раньше (возврат из окна «Не сохранилось»): {amount, date, walletId}
+function editTx(id, pre) {
   var t = Engine.findTx(UI.S, id);
   if (!t) { UI.dlgAlert('Операция не найдена.'); return; }
   var isTr = t.kind === 'transfer';
+  // 1.0.4: платёж по долгу правится целиком (тело + проценты одной суммой, как в истории
+  // долга), с той же проверкой переплаты, что у записи (Engine.editDebtTx)
+  var isDebt = !!(t.debtId && t.kind === 'debt');
+  var amt = t.amount;
+  pre = pre || {};
   var body =
     '<div class="ef-err" id="etErr" hidden></div>' +
     '<div class="ef"><span class="lbl">Сумма, ₽</span>' +
-      '<input class="inp" id="etAmount" type="text" inputmode="decimal" autocomplete="off" value="' + esc(Engine.fmt(t.amount)) + '">' +
+      '<input class="inp" id="etAmount" type="text" inputmode="decimal" autocomplete="off" value="' + esc(pre.amount != null ? pre.amount : Engine.fmt(amt)) + '">' +
       '<div class="calc-ops" id="etOps">' +
         '<button class="chip" type="button" data-op="+" aria-label="Плюс">+</button>' +
         '<button class="chip" type="button" data-op="−" aria-label="Минус">−</button>' +
@@ -443,29 +511,32 @@ function editTx(id) {
         '<button class="chip" type="button" data-op="=" aria-label="Посчитать">=</button>' +
       '</div><div class="calc-res" id="etRes" hidden></div></div>' +
     '<div class="ef"><span class="lbl">Дата</span>' +
-      '<input class="inp" id="etDate" type="date" max="' + esc(Engine.today()) + '" value="' + esc(t.date) + '"></div>';
+      // Р14 ревью 15.10: у операции с долгом - не раньше дня его заведения (такую дату правка отвергает)
+      Picker.dateField({ id: 'etDate', value: pre.date || t.date, max: Engine.today(),
+        min: isDebt && Engine.findDebt(UI.S, t.debtId) ? Engine.findDebt(UI.S, t.debtId).createdDate : null, title: 'Дата операции' }) + '</div>';
 
-  if (!isTr) {
+  if (!isTr && !isDebt) {
     var live = Engine.listCategories(UI.S, t.kind, { ymStr: UI.curYM() }), has = false;
-    var opts = live.map(function (c) {
+    var items = live.map(function (c) {
       if (c.id === t.catId) has = true;
-      return '<option value="' + esc(c.id) + '"' + (c.id === t.catId ? ' selected' : '') +
-        '>' + esc(c.name) + (c.archived ? ' (в архиве)' : '') + '</option>';
-    }).join('');
+      return { value: c.id, label: c.name + (c.archived ? ' (в архиве)' : '') };
+    });
     if (!has && t.catId) {
       // Категория операции не в списке (другой месяц или её уже нет): держим её первой
       // строкой под своим именем, а если её не осталось - так и говорим.
-      opts = '<option value="' + esc(t.catId) + '" selected>' +
-        esc(UI.catName(t.catId) || 'Категории больше нет') + '</option>' + opts;
+      items.unshift({ value: t.catId, label: UI.catName(t.catId) || 'Категории больше нет' });
     }
-    body += '<div class="ef"><span class="lbl">' + (t.kind === 'inc' ? 'Источник дохода' : 'Категория') + '</span>' +
-      '<select class="inp" id="etCat">' + opts + '</select></div>';
+    var catLbl = t.kind === 'inc' ? 'Источник дохода' : 'Категория';
+    body += '<div class="ef"><span class="lbl">' + catLbl + '</span>' +
+      Picker.listField({ id: 'etCat', items: items, value: t.catId || (items[0] && items[0].value), title: catLbl }) + '</div>';
   }
+  // 1.0.4: у операции с долгом сам долг не меняется (только сумма, дата и кошелёк)
+  if (isDebt) body += '<div class="ef"><span class="lbl">Долг</span><div class="inp ro">' + esc(UI.debtName(t.debtId) || '-') + '</div></div>';
   body += '<div class="ef"><span class="lbl">' + (isTr ? 'Откуда' : 'Кошелёк') + '</span>' +
-    '<select class="inp" id="etWallet">' + walletOptions(t.walletId) + '</select></div>';
+    walletField('etWallet', pre.walletId || t.walletId, isTr ? 'Откуда' : 'Кошелёк') + '</div>';
   if (isTr) {
     body += '<div class="ef"><span class="lbl">Куда</span>' +
-      '<select class="inp" id="etTo">' + walletOptions(t.toWalletId) + '</select></div>';
+      walletField('etTo', t.toWalletId, 'Куда') + '</div>';
   }
 
   UI.openDlg({
@@ -486,6 +557,11 @@ function repeatTx(id) {
   var t = Engine.findTx(UI.S, id);
   if (!t) { UI.dlgAlert('Операция не найдена.'); return; }
   UI.haptic('light');
+  // 1.0.4: повтор платежа по долгу - тот же платёж целиком (проценты пересчитаются)
+  if (t.debtId && t.kind === 'debt') {
+    UI.openAmount({ kind: t.op === 'take' ? 'debttake' : 'debtpay', walletId: t.walletId || null, debtId: t.debtId }, t.amount);
+    return;
+  }
   UI.openAmount({
     kind: t.kind, catId: t.catId || null,
     walletId: t.walletId || null, toWalletId: t.toWalletId || null
@@ -519,6 +595,7 @@ function saveEditTx(id) {
     date: dt,
     walletId: wid
   };
+  if (t.debtId && t.kind === 'debt') return saveEditDebt(t, patch, raw);
   if ($('etCat')) patch.catId = $('etCat').value;
   if ($('etTo')) {
     if ($('etTo').value === patch.walletId) { showEtErr('Выберите разные кошельки.'); return false; }
@@ -535,9 +612,35 @@ function saveEditTx(id) {
     return false;
   }
   UI.save(); renderCard(); UI.render(); UI.haptic('light');
+  if (UI.debtsChanged) UI.debtsChanged();
   // правка суммы может увести категорию за план — звук выбирается по уровню ПОСЛЕ
   // правки, тем же правилом, что и при записи операции
   UI.soundTx(t.kind, patch.catId || t.catId, Engine.ym(dt));
+}
+
+// 1.0.4: правка платежа по долгу - весь платёж (Engine.editDebtTx). Отказ (переплата, дата
+// раньше заведения долга) - то же окно «Не сохранилось», что у записи платежа; «Понятно»
+// возвращает в форму с введёнными значениями.
+function saveEditDebt(t, patch, raw) {
+  var id = t.id, d = Engine.findDebt(UI.S, t.debtId);
+  try {
+    Engine.editDebtTx(UI.S, id, patch);
+  } catch (e) {
+    var m = e && e.message;
+    if ((m === 'over' || m === 'before-created') && UI.debtSaveErr) {
+      var back = { amount: raw, date: patch.date, walletId: patch.walletId };
+      UI.dlgAlert(UI.debtSaveErr(m, d, e.max), 'Не сохранилось', function () { editTx(id, back); });
+      return false;   // окно отказа уже на месте формы - не закрывать его
+    }
+    showEtErr(m === 'amount-max' ? 'Максимум ' + Engine.fmt(Engine.MAX_AMOUNT) + '\u00a0₽'
+      : m === 'date-future' ? UI.FUTURE_MSG
+      : m === 'date' ? 'Проверьте дату'
+      : 'Сумма должна быть больше нуля');
+    return false;
+  }
+  UI.save(); renderCard(); UI.render(); UI.haptic('light');
+  if (UI.debtsChanged) UI.debtsChanged();
+  if (d && UI.offerArchive && !(Engine.debtBalance(UI.S, d.id) > 0)) UI.offerArchive(d.id);
 }
 
 // ---------- связки ----------

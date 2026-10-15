@@ -121,6 +121,8 @@
   <div class="am-num">
     <div id="amMini" class="am-mini"></div>
     <div id="amExpr" class="am-expr">0&nbsp;₽</div>
+    <!-- 14.10: платёж/возврат по долгу - погасить весь остаток одним касанием -->
+    <button id="amAll" class="am-all" type="button" hidden></button>
   </div>
 
   <!-- Ситуативная подсказка экрана суммы: один раз, гасится свайпом, подчиняется
@@ -163,11 +165,10 @@
   <div class="am-date" id="amDate">
     <button class="amd" id="amBtnYest" type="button" data-d="yest">Вчера</button>
     <button class="amd on" id="amBtnToday" type="button" data-d="today">Сегодня</button>
-    <label class="amd cal" id="amPick">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+    <button class="amd cal" id="amPick" type="button" aria-label="Выбрать дату операции">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
       <span id="amDateVal" class="am-dval" hidden></span>
-      <input type="date" id="amDateInput" aria-label="Дата операции">
-    </label>
+    </button>
   </div>
 
 </div>
@@ -293,7 +294,22 @@
       </span>
       <span class="sm-card-t">
         <span class="sm-card-n">Динамика по месяцам</span>
-        <span class="sm-card-s">расходы за год</span>
+        <span class="sm-card-s">расходы и доходы за год</span>
+      </span>
+      <span class="sm-card-go" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+      </span>
+    </button>
+    <!-- 1.0.4: «Капитал и обязательства» - одна карточка (капитал и нагрузка - вкладки внутри), видна
+         только когда долги есть: 7 карточек на 640 по высоте не помещались (ревью 12.10) -->
+    <button class="sm-card premium" id="smGoDebt" type="button" hidden>
+      <span class="sm-card-ic c-cap" aria-hidden="true">
+        <!-- весы с перевесом (14.10): стойка, коромысло наклонено, левая чаша ниже -->
+        <svg class="ic-scales" viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5V20M8 20h8"/><path d="M4.5 9.5l15-3"/><path d="M4.5 9.5 2.5 15h4zM19.5 6.5l-2 5h4z"/><path d="M2.5 15a2 2 0 0 0 4 0M17.5 11.5a2 2 0 0 0 4 0"/></svg>
+      </span>
+      <span class="sm-card-t">
+        <span class="sm-card-n">Капитал и обязательства</span>
+        <span class="sm-card-s">капитал и долговая нагрузка</span>
       </span>
       <span class="sm-card-go" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
@@ -304,6 +320,10 @@
   <div class="sm-tabs" id="smKinds" role="tablist">
     <button class="sm-tab on" type="button" role="tab" data-kind="exp">Расходы</button>
     <button class="sm-tab" type="button" role="tab" data-kind="inc">Доходы</button>
+  </div>
+  <div class="sm-tabs" id="smDebtTabs" role="tablist">
+    <button class="sm-tab on" type="button" role="tab" data-dv="cap">Капитал</button>
+    <button class="sm-tab" type="button" role="tab" data-dv="load" id="smTabDebts">Долги</button>
   </div>
   <div class="sm-body" id="smBody"></div>
 </div>
@@ -336,7 +356,7 @@
     <div class="menu-list">
       <button class="mi c-purple" id="mTheme" type="button">
         <span class="mi-ic mi-sw2" id="mThemeSwatch" aria-hidden="true"></span>
-        <span class="mi-t">Тема</span><span class="mi-s" id="mThemeInfo">Ночная</span>
+        <span class="mi-t">Тема</span><span class="mi-s" id="mThemeInfo">Тёмная</span>
       </button>
       <button class="mi c-blue" id="mUpdate" type="button">
         <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8"/><path d="M12 7.4v7.2"/><path d="m8.6 11.2 3.4 3.4 3.4-3.4"/></svg></span>
@@ -357,7 +377,7 @@
       </button>
       <button class="mi c-green" id="mCopy" type="button">
         <span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5.5A1.5 1.5 0 0 1 6.5 4h9L20 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-12A1.5 1.5 0 0 1 5 18.5z"/><path d="M8.5 4v5h6V4"/><path d="M8 20v-6h8v6"/></svg></span>
-        <span class="mi-t">Копия данных</span><span class="mi-s" id="mCopyInfo">сохранить, восстановить</span>
+        <span class="mi-t">Копия данных</span><span class="mi-s" id="mCopyInfo">копия, таблица Excel</span>
       </button>
       <!-- 1.0.3: замок на вход (lock.js) -->
       <button class="mi c-purple" id="mLock" type="button">
@@ -371,6 +391,8 @@
 
   </div>
   <input type="file" id="fileRestore" accept=".json" hidden>
+  <!-- 1.0.4: загрузка операций из таблицы (экраны - import-ui). text/* - CSV на телефоне бывает и text/csv, и text/comma-separated-values -->
+  <input type="file" id="fileImport" accept=".csv,.xlsx,.txt,text/*,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,application/octet-stream" hidden>
 </nav>
 
 <!-- приветственный онбординг при первом запуске (логика — maybeOnboard) -->
@@ -389,7 +411,7 @@
       <li>кошелёк → на кошелёк - перевод</li>
     </ul>
     <div class="ob-p ob-first">Сначала задайте баланс кошельков (тап по кошельку) и, по желанию, лимиты категорий на месяц.</div>
-    <div class="ob-p ob-dim">Кошельки, категории и лимиты настраиваются в меню - хомяк сверху слева. Аналитика - кнопка справа.</div>
+    <div class="ob-p ob-dim">Кошельки, категории и лимиты - в меню (хомяк сверху слева). Долг или новый кошелёк - «+» в ленте кошельков.</div>
     <button id="obDone" class="btn primary ob-btn" type="button">Понятно, начать</button>
   </div>
 </div>
@@ -437,6 +459,23 @@
   </div>
 </div>
 
+<!-- 1.0.4: баннер просрочки долга (debts.js): на следующий день после даты платежа без
+     записанного платежа. Один на долг на месяц, на месте карточки «Сохраните копию». -->
+<div id="debtWarn" hidden role="status">
+  <div class="dw-head">
+    <span class="dw-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M18 6 6 18"/></svg></span>
+    <span class="dw-t">Нет платежа по долгу</span>
+    <button id="dwClose" class="sh-x dw-x" type="button" aria-label="Закрыть">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+    </button>
+  </div>
+  <div class="dw-p" id="dwText"></div>
+  <div class="rm-btns dw-btns">
+    <button id="dwFix" class="btn ghost" type="button">Поправить остаток</button>
+    <button id="dwPay" class="btn primary" type="button">Записать платёж</button>
+  </div>
+</div>
+
 <!-- Экран «Защита входа» (lock.js). Закрывает всё приложение: при запуске, после фона
      дольше минуты. Класс cover - шторка без клавиатуры на время фона. Это замок от
      посторонних глаз, данные он не шифрует. -->
@@ -447,6 +486,10 @@
     <div class="lk-dots" id="lockDots" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
     <div class="lk-msg" id="lockMsg" role="status"></div>
     <div class="lk-pad" id="lockPad"></div>
+    <div class="lk-bioacts" id="lockBioActs">
+      <button class="btn primary" id="lockBioTry" type="button">Войти по отпечатку</button>
+      <button class="btn ghost" id="lockToCode" type="button">Ввести код</button>
+    </div>
     <button class="lk-link info-row" id="lockForgot" type="button"><i class="i-ico" aria-hidden="true"></i>Забыли код?</button>
   </div>
   <div class="lk-sheet" id="lockSheet" hidden>
@@ -471,12 +514,17 @@
 <script src="icons.js"></script>
 <script src="sound.js"></script>
 <script src="ui.js"></script>
+<script src="picker.js"></script>
 <script src="sheet.js"></script>
 <script src="edit.js"></script>
 <script src="summary.js"></script>
 <script src="purchase.js"></script>
 <script src="anim.js"></script>
+<script src="xlsx.js"></script>
 <script src="backup.js"></script>
+<script src="import.js"></script>
+<script src="import-ui.js"></script>
+<script src="debts.js"></script>
 <script src="nudges.js"></script>
 <script src="update.js"></script>
 <script src="selftest.js"></script>

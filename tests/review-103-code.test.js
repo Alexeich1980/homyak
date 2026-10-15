@@ -216,9 +216,7 @@ async function bootShip() {
   async function boot(setup) {
     await page.goto(url); await waitFor(() => page.eval('document.readyState==="complete"'), 10000);
     await page.eval(`(function(){localStorage.clear();${setup || ''};return 1})()`);
-    // APP_READY ставит ui.js раньше, чем выполнятся nudges.js/update.js: ждём и конец загрузки страницы
-    // (под нагрузкой полсекунды не хватало - «Nudges is not defined»)
-    await page.goto(url); await waitFor(() => page.eval('!!window.APP_READY && document.readyState === "complete"'), 20000, 'стор-копия нарисовалась'); await sleep(500);
+    await page.goto(url); await waitFor(() => page.eval('!!window.APP_READY && document.readyState === "complete"'), 20000, 'стор-копия нарисовалась')  // ui.js ставит APP_READY раньше nudges.js/update.js; await sleep(500);
   }
   return { dir, edge, page, boot, real, done: async () => { await edge.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
 }
@@ -256,36 +254,37 @@ test('1, 2, 3, 5, 6, 12, 16: замок, свои системные окна, �
         verifyIdentity: function(){ return Promise.reject({ code: '${code}', message: 'x' }); } } })`);
       await page.eval(`AppLock.lockNow(); 1`); await sleep(800);
       const msg = await page.eval(`document.getElementById('lockMsg').textContent`);
-      assert.equal(/Не получилось/.test(msg), bad, '6: код ' + code + ' → «' + msg + '»');
+      // 14.10: настоящий сбой - «Отпечаток не распознан… осталось N» (3 попытки), потом «Не получилось»
+      assert.equal(/Не получилось|не распознан/.test(msg), bad, '6: код ' + code + ' → «' + msg + '»');
       await page.eval(pin('1234')); await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл');
     }
     await page.eval(`(function(){ var s = JSON.parse(localStorage.getItem(AppLock.KEY)); s.bio = false; localStorage.setItem(AppLock.KEY, JSON.stringify(s)); return 1; })()`);
 
     // 2а: окно оценки - RuStore сразу ответил ошибкой, в фон не уходили: следующий уход - со шторкой и замком
     const r2 = JSON.parse(await page.eval(`Nudges.launch({ requestAndLaunch: function(){ return Promise.reject(new Error('no')); } }).then(function(){
-      AppLock.onBackground(); var cov = AppLock.isCovered(); AppLock._bgAt(Date.now() - 120000); var need = AppLock.onForeground();
+      AppLock.onBackground(); var cov = AppLock.isCovered(); AppLock._bgAt(Date.now() - 6 * 60000); var need = AppLock.onForeground();
       return JSON.stringify({ cov: cov, need: need }); })`));
     assert.deepEqual(r2, { cov: true, need: true }, '2: после мгновенной ошибки RuStore уход «Домой» прощён без шторки');
     await page.eval(pin('1234')); await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл');
     // 2б: сохранение файла - системного окна нет, плагин сразу отказал (SaveFilePlugin NO_PICKER)
     await page.eval(`${NATIVE}({ SaveFile: { save: function(){ return Promise.reject({ code: 'NO_PICKER' }); } } })`);
     const r2b = JSON.parse(await page.eval(`Backup.backup().then(function(){ UI.closeDlg(); AppLock.onBackground(); var cov = AppLock.isCovered();
-      AppLock._bgAt(Date.now() - 120000); var need = AppLock.onForeground(); return JSON.stringify({ cov: cov, need: need }); })`));
+      AppLock._bgAt(Date.now() - 6 * 60000); var need = AppLock.onForeground(); return JSON.stringify({ cov: cov, need: need }); })`));
     assert.deepEqual(r2b, { cov: true, need: true }, '2: после мгновенного отказа сохранения уход прощён');
     await page.eval(pin('1234')); await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл');
     // 2в: окно RuStore открылось через 20 с (медленная сеть) - это всё ещё своё окно
     const r2c = JSON.parse(await page.eval(`(function(){ AppLock.away(AppLock.AWAY_CALL); AppLock._awayAge(20000); AppLock.onBackground();
-      var cov = AppLock.isCovered(); AppLock._bgAt(Date.now() - 120000); var need = AppLock.onForeground(); return JSON.stringify({ cov: cov, need: need }); })()`));
+      var cov = AppLock.isCovered(); AppLock._bgAt(Date.now() - 6 * 60000); var need = AppLock.onForeground(); return JSON.stringify({ cov: cov, need: need }); })()`));
     assert.deepEqual(r2c, { cov: false, need: false }, '2: медленное окно RuStore (20 с) - лишнее запирание после оплаты');
     // без ответа (выбор файла) - прежние 10 с
     const r2d = JSON.parse(await page.eval(`(function(){ AppLock.away(); AppLock._awayAge(20000); AppLock.onBackground();
-      var cov = AppLock.isCovered(); AppLock._bgAt(Date.now() - 120000); var need = AppLock.onForeground(); return JSON.stringify({ cov: cov, need: need }); })()`));
+      var cov = AppLock.isCovered(); AppLock._bgAt(Date.now() - 6 * 60000); var need = AppLock.onForeground(); return JSON.stringify({ cov: cov, need: need }); })()`));
     assert.deepEqual(r2d, { cov: true, need: true });
     await page.eval(pin('1234')); await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл');
 
-    // 5: меню открыто → фон (шторка) → минута → замок → вход: меню закрыто и скрыто от диктора
+    // 5: меню открыто → фон (шторка) → 6 минут → замок → вход: меню закрыто и скрыто от диктора
     await page.eval(`UI.openMenu(); 1`); await sleep(400);
-    await page.eval(`(function(){ AppLock.onBackground(); AppLock._bgAt(Date.now() - 120000); AppLock.onForeground(); return 1; })()`);
+    await page.eval(`(function(){ AppLock.onBackground(); AppLock._bgAt(Date.now() - 6 * 60000); AppLock.onForeground(); return 1; })()`);
     await page.eval(pin('1234')); await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл');
     const menu = JSON.parse(await page.eval(`JSON.stringify({ open: document.getElementById('menu').classList.contains('open'), aria: document.getElementById('menu').getAttribute('aria-hidden') })`));
     assert.deepEqual(menu, { open: false, aria: 'true' }, '5: закрытое меню после входа видно диктору');
@@ -332,7 +331,7 @@ test('4, 11, 13: повреждённые данные - окно после з�
     // 4: окно «Данные не прочитались» → фон → замок → вход: окно снова на экране
     await t.boot(`localStorage.setItem('homyak_v1','{"ver":3,"tx":[{"a":')`);
     assert.equal(await page.eval(`document.getElementById('dlgTitle').textContent`), 'Данные не прочитались');
-    await page.eval(`AppLock._enable('1234', false).then(function(){ AppLock.onBackground(); AppLock._bgAt(Date.now() - 120000); AppLock.onForeground(); return 1; })`);
+    await page.eval(`AppLock._enable('1234', false).then(function(){ AppLock.onBackground(); AppLock._bgAt(Date.now() - 6 * 60000); AppLock.onForeground(); return 1; })`);
     assert.equal(await page.eval(`AppLock.isLocked() && document.getElementById('dlg').hidden`), true, 'под замком окно должно закрыться');
     await page.eval(pin('1234')); await waitFor(() => page.eval('!AppLock.isLocked()'), 4000, 'код открыл'); await sleep(200);
     const back = JSON.parse(await page.eval(`JSON.stringify({ open: !document.getElementById('dlg').hidden, t: document.getElementById('dlgTitle').textContent, raw: !!document.getElementById('dlgSaveRaw') })`));

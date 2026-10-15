@@ -39,6 +39,17 @@ test('приветствие: карточка не наезжает на под
   assert.deepEqual(bad, [], 'находки на приветствии:\n' + bad.join('\n'));
 });
 
+test('подменю «Звук и подсказки», «Копия данных», «Таблица Excel» без прокрутки, кнопки окон импорта видны без прокрутки - 320x640 и 360x640, обе темы', { skip: skipEdge(), timeout: 300000 }, async () => {
+  const Q = require('../tools/qa-shots.js');
+  const only = {};
+  Q.SUB_SCREENS.concat(Q.IMP_SCREENS).forEach((n) => { only[n] = Q.SCREENS[n]; });
+  const res = await Q.shootAll({ sizes: Q.SUB_SIZES, only, probe: "document.getElementById('dlg').scrollHeight + '/' + document.getElementById('dlg').clientHeight" });
+  assert.equal(res.length, Q.SUB_SIZES.length * Q.THEMES.length * (Q.SUB_SCREENS.length + Q.IMP_SCREENS.length));
+  const bad = [];
+  res.forEach((r) => r.bad.forEach((b) => bad.push(r.tag + ': ' + b)));
+  assert.deepEqual(bad, [], 'находки в подменю:\n' + bad.join('\n'));
+});
+
 test('три вида кнопок по исходникам: «Отмена/Закрыть/Позже» - переход (nav), не действие', () => {
   const bad = [];
   for (const f of fs.readdirSync(path.join(ROOT, 'www')).filter((n) => /\.(js|html)$/.test(n) && n !== 'selftest.js')) {
@@ -84,4 +95,17 @@ test('своя заставка: хомяк на фоне тёмной темы,
   const man = rd('android/app/src/main/AndroidManifest.xml');
   assert.match(man, /android:icon="@mipmap\/ic_launcher"/);
   assert.match(man, /android:roundIcon="@mipmap\/ic_launcher_round"/);
+});
+
+test('ревью 1.0.4: выбор аналитики без прокрутки (с долгами и без), подсказка не закрывает «Напомнить о платеже», тумблер без разрешения - 320x640 и 360x640, обе темы', { skip: skipEdge(), timeout: 300000 }, async () => {
+  const Q = require('../tools/qa-shots.js');
+  const only = {};
+  Q.REVIEW_SCREENS.forEach((n) => { only[n] = Q.SCREENS[n] || Q.DEBT_SCREENS[n]; });
+  const res = await Q.shootAll({ sizes: Q.SUB_SIZES, only, probe: "(document.getElementById('dbRemind') || {}).textContent || ''" });
+  assert.equal(res.length, Q.SUB_SIZES.length * Q.THEMES.length * Q.REVIEW_SCREENS.length);
+  const bad = [];
+  res.forEach((r) => r.bad.forEach((b) => bad.push(r.tag + ': ' + b)));
+  // без разрешения тумблер честно говорит, что уведомления запрещены
+  res.filter((r) => /^debtcardnoperm/.test(r.tag)).forEach((r) => { if (!/запрещены в настройках телефона/.test(r.probe)) bad.push(r.tag + ': нет подписи про запрет: ' + r.probe); });
+  assert.deepEqual(bad, [], 'находки:\n' + bad.join('\n'));
 });

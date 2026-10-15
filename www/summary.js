@@ -11,24 +11,26 @@ function fmt(n) { return UI.fmt(n); }
 function money(v) { return UI.money(v); }   // с копейками — суммы операций в ленте
 function all(root, sel) { return Array.prototype.slice.call(root.querySelectorAll(sel)); }
 
-// Цвет-ярлык категории берётся из палитры темы (--hue-0..5) по её месту в списке:
-// шкала долей, точки легенды и иконки строк красятся одним и тем же индексом.
+// Цвет-ярлык категории - по её месту в списке (строки отсортированы по факту, крупная - первая):
+// шкала долей, точки легенды и строки красятся одним и тем же индексом. Палитры свои (14.10):
+// расходы - спокойные --sx-0..5 без красного и оранжевого (те только у перерасхода и «почти
+// лимита»); доходы - оттенки одного зелёного --sg-0..5, крупный - самый насыщенный.
 var HUES = 6;
 var MIN_SEG = 0.02;       // сегмент меньше 2% уходит в «Прочее»
 var MAX_LEG = 6;          // сколько фишек показываем в легенде
 
-function hue(i) { return 'var(--hue-' + (i % HUES) + ')'; }
-function tint(i) { return 'var(--tint-' + (i % HUES) + ')'; }
+function hue(i) { return 'var(--' + (kind === 'inc' ? 'sg-' : 'sx-') + (kind === 'inc' ? Math.min(i, HUES - 1) : i % HUES) + ')'; }
+function tint(i) { return 'var(--' + (kind === 'inc' ? 'sgt-' : 'sxt-') + (kind === 'inc' ? Math.min(i, HUES - 1) : i % HUES) + ')'; }
 
 // ---------- состояние экрана ----------
-var VIEWS = { summary: 1, feed: 1, heat: 1, attn: 1, dyn: 1 };
+var VIEWS = { summary: 1, feed: 1, heat: 1, attn: 1, dyn: 1, cap: 1, load: 1 };
 var WD = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 var MM = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек'];
 var heatDay = null;       // выбранный день в тепловой карте (его операции показываем ниже)
 
 var opened = false;
 var ymStr = null;         // месяц сводки
-var view = 'chooser';     // 'chooser' | 'summary' | 'feed' | 'heat' | 'attn' | 'dyn'
+var view = 'chooser';     // 'chooser' | 'summary' | 'feed' | 'heat' | 'attn' | 'dyn' | 'cap' | 'load'
 var kind = 'exp';         // вкладка «Расходы | Доходы» внутри сводки
 var paintKey = null;      // что было нарисовано в прошлый раз — по нему держим прокрутку
 var showZero = false;     // раскрыт ли блок «без трат»
@@ -97,9 +99,16 @@ function headHtml(rows, factTotal, planTotal) {
 }
 
 // ---------- блок 2: строки категорий ----------
+// Иконка категории - как на главном экране: своя иконка категории, затем угадывание по имени.
+// Раньше брали только S.icons и сразу угадывали - «Еда» в сводке становилась многоточием (06.10).
+function catIcon(S, r, kind) {
+  var f = Engine.findCategory(S, r.catId);
+  return S.icons[r.catId] || (f && f.cat.icon) || Icons.guessKind(r.name, kind);
+}
+
 function rowHtml(r, factTotal, idx) {
   var S = UI.S;
-  var icon = S.icons[r.catId] || Icons.guessKind(r.name, kind);
+  var icon = catIcon(S, r, kind);
   var L = UI.levelOf(kind, r.fact, r.plan);
   var lvl = 'lvl-' + L.lvl, ratio = L.pct, style = '';
   if (r.fact > 0 && !(r.plan > 0)) { lvl = ''; style = 'background:' + hue(idx) + ';'; }
@@ -150,7 +159,13 @@ function bodyHtml() {
 // UI.bindTxSwipe из sheet.js, здесь только устройство строки.
 function feedRowHtml(t) {
   var top, name, cls, amt;
-  if (t.kind === 'transfer') {
+  if (t.kind === 'debt') {
+    // 1.0.4: операция с долгом - вид операции сверху, «кошелёк → долг» (или обратно) строкой
+    top = UI.debtOpLabel(t.op === 'take' ? 'debttake' : 'debtpay', t.debtId);
+    var wn = UI.walletName(t.walletId) || '—', dn = UI.debtName(t.debtId) || 'долг удалён';
+    name = t.op === 'take' ? dn + ' → ' + wn : wn + ' → ' + dn;
+    cls = 'zero'; amt = (t.op === 'take' ? '+' : '−') + money(t.amount);
+  } else if (t.kind === 'transfer') {
     top = 'Перевод';
     name = (UI.walletName(t.walletId) || '—') + ' → ' + (UI.walletName(t.toWalletId) || '—');
     cls = 'zero'; amt = money(t.amount);
@@ -234,11 +249,11 @@ function heatHtml() {
 // ---------- экран «Зона внимания»: где перерасход ----------
 function attnRow(r) {
   var S = UI.S;
-  var icon = S.icons[r.catId] || Icons.guessKind(r.name, 'exp');
+  var icon = catIcon(S, r, 'exp');
   var ratio = Math.min(r.ratio, 1);
   var fp = fmt(r.fact) + ' / ' + (r.plan > 0 ? fmt(r.plan) : '—') + '\u00a0₽';
   var note = r.level === 'over'
-    ? (r.plan > 0 ? '+' + fmt(r.over) + '\u00a0₽ сверх' : fmt(r.fact) + '\u00a0₽ при лимите 0')
+    ? (r.plan > 0 ? '+' + fmt(r.over) + '\u00a0₽ сверх лимита' : fmt(r.fact) + '\u00a0₽ при лимите 0')
     : pct(r.ratio) + '\u00a0% лимита';
   return '<div class="at-row lvl-' + r.level + (r.archived ? ' retired' : '') + '">' +
     '<span class="sm-ico" aria-hidden="true">' + Icons.img(icon, 'exp', 23, r.name) + '</span>' +
@@ -262,22 +277,25 @@ function attnHtml() {
   return h;
 }
 
-// ---------- экран «Динамика по месяцам»: расходы за год ----------
+// ---------- экран «Динамика по месяцам»: расходы и доходы за год ----------
+// 14.10: те же вкладки «Расходы | Доходы», что в сводке. Доходы - зелёные полосы, отметка -
+// план дохода; перевыполнение плана - хорошо (никогда не красным).
 // Вертикальный список из 12 строк (Янв..Дек): подпись месяца слева, горизонтальная
 // полоса факта (все делят одну шкалу — самый дорогой месяц = 100%, длины сравнимы),
 // тонкая метка лимита на полосе и сумма факта справа. Так все 12 месяцев видны сразу,
 // без горизонтальной прокрутки, а число не обрезается на узком столбике.
 function dynHtml() {
   var S = UI.S;
-  if (!Engine.listCategories(S, 'exp').length) return noPlansHtml();
+  if (!Engine.listCategories(S, kind).length) return noPlansHtml();
   var year = parseInt(Engine.ym(Engine.today()).slice(0, 4), 10);
-  var data = Engine.monthlyTotals(S, year);
+  var inc = kind === 'inc';
+  var data = Engine.monthlyTotals(S, year, kind);
   var max = 1;                                          // общая шкала полос — самый дорогой месяц
   data.forEach(function (d) { if (d.fact > max) max = d.fact; });
   var selM = (parseInt(ymStr.slice(0, 4), 10) === year) ? (parseInt(ymStr.slice(5, 7), 10) - 1) : -1;
 
   var rows = data.map(function (d) {
-    var on = d.m === selM, over = d.plan > 0 && d.fact > d.plan, zero = d.fact <= 0;
+    var on = d.m === selM, over = !inc && d.plan > 0 && d.fact > d.plan, zero = d.fact <= 0;
     var w = Math.max(0, Math.min(d.fact / max, 1));
     var pw = d.plan > 0 ? Math.max(0, Math.min(d.plan / max, 1)) : -1;
     var cls = 'dy-row' + (on ? ' on' : '') + (over ? ' over' : '') + (zero ? ' zero' : '');
@@ -291,13 +309,89 @@ function dynHtml() {
     '</button>';
   }).join('');
 
-  return '<div class="dy-list">' + rows + '</div>' +
-    '<div class="dy-foot"><span class="dy-key"><i></i>факт</span>' +
-    '<span class="dy-key plan"><i></i>лимит</span><span>' + esc(String(year) + ' год') + '</span></div>';
+  return '<div class="dy-list' + (inc ? ' inc' : '') + '">' + rows + '</div>' +
+    '<div class="dy-foot' + (inc ? ' inc' : '') + '"><span class="dy-key"><i></i>факт</span>' +
+    '<span class="dy-key plan"><i></i>' + (inc ? 'план' : 'лимит') + '</span><span>' + esc(String(year) + ' год') + '</span></div>';
+}
+
+// ---------- 1.0.4: «Чистый капитал» - в кошельках + мне должны - я должен, по месяцам ----------
+// 12 месяцев, кончая выбранным: полоса от нуля (минус - красным влево), сумма справа.
+function capHtml() {
+  var S = UI.S, cur = Engine.netCapital(S, ymStr);
+  // месяцы до первой записи (операции или долга) не рисуем - там капитал ничего не говорит
+  var first = ymStr;
+  S.tx.forEach(function (t) { var m = String(t.date).slice(0, 7); if (m < first) first = m; });
+  (S.debts || []).forEach(function (d) { var m = String(d.createdDate).slice(0, 7); if (m < first) first = m; });
+  var series = Engine.netCapitalSeries(S, ymStr, 12).filter(function (x) { return x.ym >= first; });
+  var max = 1;
+  series.forEach(function (x) { if (Math.abs(x.net) > max) max = Math.abs(x.net); });
+  var head = '<div class="cp-head">' +
+    '<div class="sm-big' + (cur.net < 0 ? ' neg' : '') + '">' + fmt(cur.net) + '\u00a0₽</div>' +
+    '<div class="cp-parts">' +
+      // кредитки (1.0.4): их минус уже внутри «в кошельках» - показываем его отдельной строкой
+      // среди долгов, а «в кошельках» - без него (cur.own); net тот же, без задвоения
+      '<span>' + (cur.credit ? 'в кошельках без кредиток' : 'в кошельках') + ' <b>' + fmt(cur.credit ? cur.own : cur.wallets) + '\u00a0₽</b></span>' +
+      (cur.owed ? '<span>мне должны <b>+' + fmt(cur.owed) + '\u00a0₽</b></span>' : '') +
+      (cur.owe ? '<span>я должен <b class="neg">−' + fmt(cur.owe) + '\u00a0₽</b></span>' : '') +
+      (cur.credit ? '<span>кредитные карты <b class="neg">−' + fmt(-cur.credit) + '\u00a0₽</b></span>' : '') +
+    '</div></div>';
+  var rows = series.map(function (x) {
+    var on = x.ym === ymStr, w = Math.min(1, Math.abs(x.net) / max);
+    return '<div class="dy-row cp-row' + (on ? ' on' : '') + (x.net < 0 ? ' neg' : '') + '">' +
+      '<span class="dy-m">' + MM[+x.ym.slice(5, 7) - 1] + '</span>' +
+      '<span class="dy-track"><span class="dy-fact" style="width:' + (w * 100).toFixed(1) + '%"></span></span>' +
+      '<span class="dy-v">' + fmt(x.net) + '\u00a0₽</span></div>';
+  }).join('');
+  var note = ((S.debts || []).length || Engine.hasCreditCards(S)) ? '' :
+    '<div class="cp-note">Долгов пока нет - капитал равен деньгам в кошельках. Завести долг: «+» в ленте кошельков.</div>';
+  return head + '<div class="dy-list">' + rows + '</div>' + note +
+    '<div class="dy-foot"><span>Каждый месяц - сколько было на его последний день. Текущий месяц - на сегодня.</span></div>';
+}
+
+// ---------- 1.0.4: вкладка «Долги» (была «Нагрузка», Алексей 13.10) ----------
+// Сверху - сколько должен сейчас и сколько уже выплачено (в счёт долга и процентами); ниже -
+// нагрузка выбранного месяца (плановые платежи / доходы, порог 30%) и по каждому долгу:
+// остаток, платёж и прогноз погашения. Вкладка есть, только когда есть долг «я должен».
+// «в августе 2028» (14.10): месяц в предложном падеже, год не отрывается
+var MONTH_PREP = ['январе', 'феврале', 'марте', 'апреле', 'мае', 'июне', 'июле', 'августе', 'сентябре', 'октябре', 'ноябре', 'декабре'];
+function monthPrep(v) { return MONTH_PREP[+String(v).slice(5, 7) - 1] + '\u00a0' + String(v).slice(0, 4); }
+function loadHtml() {
+  var S = UI.S, D = Engine.debtStats(S), L = Engine.debtLoad(S, ymStr);
+  var h = '<div class="ld-head">' +
+    '<div class="sm-big' + (D.total > 0 ? ' neg' : '') + '">' + fmt(D.total) + '\u00a0₽</div>' +
+    '<div class="sm-sub"><span>' + (D.total > 0 ? 'общая сумма всех долгов' : 'долгов «я должен» сейчас нет') + '</span></div>' +
+    (D.paid > 0 ? '<div class="ld-paid"><span>выплачено ' + fmt(D.paid) + '\u00a0₽</span><span>в счёт долга ' + fmt(D.body) + '\u00a0₽' +
+      (D.interest > 0 ? ' · проценты ' + fmt(D.interest) + '\u00a0₽' : '') + '</span></div>' : '') +
+    '</div>';
+  // нагрузка месяца
+  h += '<div class="ld-sec">Нагрузка за месяц</div>';
+  if (!L.list.length) h += '<div class="ld-none-t">В этом месяце платежей по долгам нет.</div>';
+  else if (L.ratio === null) h += '<div class="ld-none-t">Платежи ' + fmt(L.pay) + '\u00a0₽ в месяц, доходов в этом месяце нет.</div>';
+  else {
+    var p = L.pct, hi = Engine.LOAD_HIGH_PCT;   // порог - один, из движка (Р20 ревью 15.10)
+    h += '<div class="ld-load"><b class="' + (L.high ? 'neg' : '') + '">' + String(p).replace('.', ',') + '\u00a0%</b>' +
+      '<span>платежи ' + fmt(L.pay) + '\u00a0₽ из доходов ' + fmt(L.income) + '\u00a0₽</span></div>' +
+      '<div class="ld-bar' + (L.high ? ' high' : '') + '" aria-hidden="true"><i style="width:' + Math.min(100, p) + '%"></i><b style="left:' + hi + '%"></b></div>';
+    if (L.high) h += '<div class="ld-warn">Нагрузка выше ' + hi + '% - высокий риск просрочек. Направьте свободные деньги на досрочное погашение с сокращением ежемесячного платежа.</div>';
+  }
+  // по каждому долгу
+  if (D.list.length) h += '<div class="ld-list">' + D.list.map(function (x) {
+    var when = x.never ? '<span class="ld-late">платёж не покрывает проценты</span>'
+      : 'закроется в ' + esc(monthPrep(x.until));
+    return '<div class="ld-row"><div class="ld-l"><span class="ld-n">' + esc(x.name) + '</span>' +
+      '<span class="ld-s">платёж ' + fmt(x.pay) + '\u00a0₽ · ' + when + '</span></div>' +
+      '<span class="ld-v">' + fmt(x.left) + '\u00a0₽</span></div>';
+  }).join('') + '</div>';
+  // подвал (14.10): как считан месяц закрытия; про кредитки - всегда, когда они есть
+  h += '<div class="dy-foot ld-foot"><span>Месяц закрытия - расчёт: если и дальше платить по графику с учётом ставки. Досрочные платежи его приблизят.' +
+    (Engine.hasCreditCards(S) ? ' Кредитные карты в нагрузку не входят.' : '') + '</span></div>';
+  return h;
 }
 
 function renderBody() {
-  return view === 'feed' ? feedHtml()
+  return view === 'cap' ? capHtml()
+    : view === 'load' ? loadHtml()
+    : view === 'feed' ? feedHtml()
     : view === 'heat' ? heatHtml()
     : view === 'attn' ? attnHtml()
     : view === 'dyn' ? dynHtml()
@@ -308,6 +402,17 @@ function paint() {
   if (!opened) return;
   $('summary').dataset.view = view;           // видимость блоков решает CSS по этому атрибуту
   $('summary').classList.toggle('sm-free', !fullAccess());   // замки на премиум-карточках выбора
+  // «Капитал и обязательства» (1.0.4) - только когда долги есть (и погашенные в архиве: история)
+  $('smGoDebt').hidden = !((UI.S.debts || []).length || Engine.hasCreditCards(UI.S));
+  // вкладка «Долги» - только когда есть долг «я должен»; без неё и вкладок нет, один «Капитал»
+  var oweAny = (UI.S.debts || []).some(function (d) { return d.type === 'owe'; });
+  if (view === 'load' && !oweAny) view = 'cap';
+  $('smDebtTabs').hidden = !oweAny;
+  all($('smDebtTabs'), '.sm-tab').forEach(function (b) {
+    var on = b.getAttribute('data-dv') === view;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
   if (view === 'chooser') return;             // на экране выбора рисовать в теле нечего
 
   $('smMonth').textContent = shortMonth(ymStr);
@@ -330,7 +435,7 @@ function paint() {
 // открыть один из двух экранов (память «последнего открытого» больше не ведём:
 // аналитика всегда открывается выбором из двух карточек)
 // В бесплатной версии открыты только «Сводка» и «Лента». Остальное — под полным доступом.
-var PREMIUM = { heat: 1, attn: 1, dyn: 1 };
+var PREMIUM = { heat: 1, attn: 1, dyn: 1, cap: 1, load: 1 };
 function fullAccess() { return !(UI.hasFullAccess) || UI.hasFullAccess(); }
 
 function setView(v) {
@@ -428,6 +533,11 @@ $('smGoFeed').addEventListener('click', function () { setView('feed'); });
 $('smGoHeat').addEventListener('click', function () { setView('heat'); });
 $('smGoAttn').addEventListener('click', function () { setView('attn'); });
 $('smGoDyn').addEventListener('click', function () { setView('dyn'); });
+$('smGoDebt').addEventListener('click', function () { setView('cap'); });
+// «Капитал | Нагрузка» - вкладки внутри «Капитала и обязательств»
+all($('smDebtTabs'), '.sm-tab').forEach(function (b) {
+  b.addEventListener('click', function () { setView(b.getAttribute('data-dv')); });
+});
 
 all($('smKinds'), '.sm-tab').forEach(function (b) {
   b.addEventListener('click', function () {
@@ -490,7 +600,7 @@ UI.summaryToChooser = toChooser;
 // QA: ?demo&open=summary[&tab=inc][&view=feed|heat|attn|dyn|summary|chooser][&ym=YYYY-MM]
 // открывает нужный экран сразу — для скриншотов
 if (UI.DEMO && location.search.indexOf('open=summary') >= 0) {
-  var vm = location.search.match(/[?&]view=(feed|heat|attn|dyn|summary|chooser)/);
+  var vm = location.search.match(/[?&]view=(feed|heat|attn|dyn|cap|load|summary|chooser)/);
   var qv = vm ? vm[1] : 'summary';
   var ymM = location.search.match(/[?&]ym=(\d{4}-\d{2})/);
   open({ kind: location.search.indexOf('tab=inc') >= 0 ? 'inc' : 'exp', view: qv, ym: ymM ? ymM[1] : undefined });

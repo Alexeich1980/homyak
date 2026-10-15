@@ -143,6 +143,76 @@ function saveFile(data, name, mime, mark, opts) {
   return Promise.resolve(name);
 }
 
+// ---------- выгрузка в Excel (1.0.4, только «Полный доступ») ----------
+// Файл .xlsx собирает xlsx.js (fflate грузим по требованию, как update.js), на телефоне
+// он уходит в системное окно «Отправить» (свой плагин ShareFile): Telegram, почта, Диск.
+// В браузере (QA на компьютере) - обычное скачивание.
+var EXPORT_TITLE = 'Выгрузка в Excel';
+var EXPORT_WHY = {
+  NO_PLUGIN: 'Приложение не дотянулось до окна «Отправить». Переустановите приложение.',
+  NO_WRITE: 'Телефон не дал подготовить файл - возможно, мало свободной памяти. Освободите место и попробуйте ещё раз.',
+  NO_SHARE: 'На телефоне не нашлось окна «Отправить». Сохраните копию данных другим способом.',
+  NO_LIB: 'Не удалось собрать таблицу. Закройте приложение, откройте снова и попробуйте ещё раз.'
+};
+var EXPORT_DEFAULT = 'Не удалось отправить файл. Попробуйте ещё раз.';
+function exportFailed(e) {
+  var code = (e && typeof e.code === 'string') ? e.code : '';
+  UI.dlgAlert(EXPORT_WHY[code] || EXPORT_DEFAULT, EXPORT_TITLE);
+  return null;
+}
+var fflateLoad = null;
+function loadFflate() {
+  if (window.fflate) return Promise.resolve(window.fflate);
+  if (fflateLoad) return fflateLoad;
+  fflateLoad = new Promise(function (res, rej) {
+    var s = document.createElement('script');
+    s.src = 'vendor/fflate.min.js';
+    s.onload = function () { window.fflate ? res(window.fflate) : rej({ code: 'NO_LIB' }); };
+    s.onerror = function () { fflateLoad = null; rej({ code: 'NO_LIB' }); };
+    document.head.appendChild(s);
+  });
+  return fflateLoad;
+}
+function bytesToBase64(bytes) {
+  var out = '', CH = 0x8000;
+  for (var j = 0; j < bytes.length; j += CH) out += String.fromCharCode.apply(null, bytes.subarray(j, j + CH));
+  return btoa(out);
+}
+function full() { return !(UI.hasFullAccess) || !!UI.hasFullAccess(); }
+var NO_EXPORT_NOW = 'Выгрузку сейчас сделать нельзя: в таблице оказались бы пустые данные.';
+function exportXlsx() {
+  if (!full()) { if (UI.paywall) UI.paywall(); return Promise.resolve(null); }
+  if (UI.isReadOnly && UI.isReadOnly()) {
+    if (UI.showProblem) UI.showProblem(NO_EXPORT_NOW);
+    else UI.dlgAlert(NO_EXPORT_NOW, EXPORT_TITLE);
+    return Promise.resolve(null);
+  }
+  var name = Engine.safeFileName(Xlsx.fileName(), 'Хомяк-операции.xlsx');
+  return loadFflate().then(function (ff) {
+    var bytes;
+    try { bytes = Xlsx.build(UI.S, Engine, ff); } catch (e) { throw { code: 'NO_LIB' }; }
+    if (window.isNativeApp && window.isNativeApp()) {
+      var N = native();
+      if (!N || !N.ShareFile) throw { code: 'NO_PLUGIN' };
+      // окно «Отправить» уводит приложение в фон: это не уход хозяина, замок не запирает.
+      // Ответ плагина приходит после возврата в приложение - тогда и снимаем отметку.
+      var release = away(window.AppLock && window.AppLock.AWAY_CALL);
+      return Promise.resolve().then(function () {
+        return N.ShareFile.share({ name: name, mime: Xlsx.MIME, base64: bytesToBase64(bytes), title: 'Отправить таблицу' });
+      }).then(function (r) { release(); UI.haptic('light'); return r && r.ok === false ? null : name; },
+        function (e) { release(); throw e; });
+    }
+    var url = URL.createObjectURL(new Blob([bytes], { type: Xlsx.MIME }));
+    var a = document.createElement('a');
+    a.href = url; a.download = name; a.rel = 'noopener'; a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { if (a.parentNode) a.parentNode.removeChild(a); URL.revokeObjectURL(url); }, 1000);
+    UI.toast('Файл сохранён: ' + name);
+    return name;
+  }).then(null, exportFailed);
+}
+
 // ---------- восстановление ----------
 function restoreText(text) {
   var st;
@@ -189,6 +259,6 @@ $('fileRestore').addEventListener('change', function () {
   fr.readAsText(file);
 });
 
-window.Backup = { STAMP_KEY: STAMP_KEY, markBackup: markBackup, backup: backup, pickRestore: pickRestore, saveRaw: saveRaw, restoreText: restoreText, fileName: fileName, toBase64: toBase64 };
+window.Backup = { STAMP_KEY: STAMP_KEY, exportXlsx: exportXlsx, loadFflate: loadFflate, bytesToBase64: bytesToBase64, markBackup: markBackup, backup: backup, pickRestore: pickRestore, saveRaw: saveRaw, restoreText: restoreText, fileName: fileName, toBase64: toBase64 };
 
 })();

@@ -24,6 +24,9 @@
       // системное окно «Сохранить как» и пишет байты туда, куда указал хозяин.
       // Им уходит бэкап: «Поделиться» вместо выбора папки хозяина путала.
       SaveFile: C.registerPlugin('SaveFile'),
+      // ShareFile - свой плагин оболочки (android/.../ShareFilePlugin.java, 1.0.4): окно
+      // «Отправить» Android с одним файлом. Им уходит выгрузка операций в Excel (backup.js).
+      ShareFile: C.registerPlugin('ShareFile'),
       // WebView — родной плагин Capacitor: им бесшовное обновление переставляет
       // приложение на распакованную папку (update.js), им же boot.js откатывает назад.
       WebView: C.registerPlugin('WebView'),
@@ -45,7 +48,11 @@
       // для «Кода на вход» (lock.js). Только проверка пальца, ключей мы в нём не храним.
       NativeBiometric: C.registerPlugin('NativeBiometric'),
       // AppPrivacy - свой плагин оболочки: прячет миниатюру в «недавних», пока включён замок.
-      AppPrivacy: C.registerPlugin('AppPrivacy')
+      AppPrivacy: C.registerPlugin('AppPrivacy'),
+      // Reminders - свой плагин оболочки (android/.../ReminderPlugin.java, 1.0.4): локальные
+      // уведомления о платежах по долгам. План дат считает Engine.reminderPlan, плагин ставит
+      // будильник (AlarmManager, без точных) и переставляет его после перезагрузки (debts.js).
+      Reminders: C.registerPlugin('Reminders')
     };
   } catch (e) {
     window.NativePlugins = null;

@@ -118,9 +118,31 @@ function save() {
   // сводка на время карточки подменяет S.ui.month в памяти; в хранилище пишем настоящий
   // (иначе вылет приложения с открытой карточкой оставлял экран на чужом месяце навсегда)
   var mem = S.ui.month, keep = (window.UI && window.UI.persistMonth) ? window.UI.persistMonth() : mem;
+  // в архиве только закрытые долги: удалили или поправили платёж архивного долга (карточка
+  // кошелька, лента) - остаток не ноль, долг снова на экране (ревью 13.10 №2)
+  var back = [];
+  try { back = Engine.reopenNonZero(S); } catch (e) {}
+  if (back.length) setTimeout(function () {
+    toast('Долг «' + back[0] + '» снова на экране: остаток уже не ноль');
+    if (window.UI && window.UI.debtsChanged) window.UI.debtsChanged();
+  }, 0);
+  // Р16 ревью 15.10: места не хватило - сначала убираем копию данных перед загрузкой таблицы
+  // (import-ui.js, второй объём данных в том же хранилище) и пробуем ещё раз; окно «Не удалось
+  // сохранить» - только если и без неё не легло
+  function put() {
+    var txt = JSON.stringify(S);
+    try { localStorage.setItem(KEY, txt); }
+    catch (e) {
+      var snap = null;
+      try { snap = localStorage.getItem(KEY + '.preimport'); } catch (x) {}
+      if (snap == null) throw e;
+      localStorage.removeItem(KEY + '.preimport');
+      localStorage.setItem(KEY, txt);
+    }
+  }
   try {
     S.ui.month = keep;
-    try { localStorage.setItem(KEY, JSON.stringify(S)); } finally { S.ui.month = mem; }
+    try { put(); } finally { S.ui.month = mem; }
     // удачная запись снимает любую полосу: и «не удалось сохранить», и «только чтение»
     saveBroken = false; saveBanner(false);
     return true;
@@ -182,7 +204,9 @@ function monthLabel(ymStr) {
 //   план задан — none/warn(в процессе)/ok(цель взята, зелёный).
 function levelOf(kind, fact, plan) {
   if (kind === 'inc') {
-    if (plan == null) return { lvl: fact > 0 ? 'inc' : 'none', pct: fact > 0 ? 1 : 0 };
+    // без плана кольцо пустое, как у расхода без лимита: иначе перевыполненный план и «плана
+    // нет» выглядят одинаково и план будто ничего не меняет (Алексей 14.10). Сумма - зелёная.
+    if (plan == null) return { lvl: fact > 0 ? 'inc' : 'none', pct: 0 };
     var fi = Engine.fillInc(fact, plan);
     return { lvl: fi.level, pct: Math.min(fi.ratio, 1) };
   }
@@ -265,6 +289,41 @@ function walletHtml(w, bal) {
     '<span class="ico">' + Icons.svg(Icons.walletKey(w.icon), 22) + '</span>' +
     '<div class="cname">' + esc(w.name) + '</div>' +
     '<div class="cbal">' + fmt(bal) + '\u00a0₽</div>' +
+    EDIT_BADGE +
+  '</div>';
+}
+
+// 1.0.4: плитка долга - в той же ленте, после кошельков, того же размера (высота главного
+// экрана не меняется). Свой вид: рамка (красная у «я должен», зелёная у «мне должны» -
+// это деньги в плюс), знак %, название и остаток - больше ничего. Состояние «я должен»
+// (Engine.debtStatus): soon - платёж этого месяца ещё впереди (мягкая подсветка),
+// overdue - день платежа прошёл без платежа (плитка красная).
+var DEBT_GLYPH = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">' +
+  '<circle cx="7" cy="7" r="2.5"/><circle cx="17" cy="17" r="2.5"/><path d="M18 6 6 18"/></svg>';
+function debtState(d) { return Engine.debtStatus(S, d.id, screenDay).state; }
+// 14.10: на плитке и в шапке карточки долга - ставка вместо значка. Ставки нет - значок «%».
+// Цвет - цвет вида долга. Р15 ревью 15.10: одна функция для плитки, шапки, строки условий
+// карточки и формы - ставка как её ввели («5,95 %», не «6%» на плитке рядом с «5,95 %» в
+// строке); пробел перед % - как везде в приложении. rateNum - число без знака (поле формы).
+function rateNum(r) { return String(Math.round(r * 1e6) / 1e6).replace('.', ','); }
+function rateText(r) {
+  if (!(r > 0)) return '';
+  return rateNum(r) + '\u00a0%';
+}
+function debtMark(d) {
+  var t = d && rateText(d.rate);
+  if (!t) return DEBT_GLYPH;
+  // длинная ставка («5,95 %», «12,95 %») - мельче, чтобы влезла в плитку и в значок шапки
+  var n = rateNum(d.rate).length;
+  return '<span class="drate' + (n >= 5 ? ' l2' : n >= 4 ? ' l1' : '') + '">' + t + '</span>';
+}
+function debtTileHtml(d) {
+  var st = debtState(d);
+  return '<div class="circle wcard debt ' + (d.type === 'owed' ? 'owed' : 'owe') +
+    (st === 'soon' || st === 'overdue' ? ' ' + st : '') + '" data-kind="debt" data-id="' + esc(d.id) + '">' +
+    '<span class="ico">' + debtMark(d) + '</span>' +
+    '<div class="cname">' + esc(d.name) + '</div>' +
+    '<div class="cbal">' + fmt(Engine.debtBalance(S, d.id)) + '\u00a0₽</div>' +
     EDIT_BADGE +
   '</div>';
 }
@@ -384,7 +443,8 @@ function hasFull() {
 // ведёт в баннер «Полный доступ» не внезапно
 function addLocked(kind) {
   var f = hasFull();
-  if (kind === 'wallet') return !Engine.canAddWallet(S, f);
+  // «+» ленты кошельков (1.0.4) заводит и кошелёк, и долг: замок - только когда закрыто и то, и другое
+  if (kind === 'wallet') return !Engine.canAddWallet(S, f) && !Engine.canAddDebt(S, f);
   if (kind === 'inc') return !Engine.canAddIncCat(S, f);
   return !Engine.canAddExpCat(S, f);
 }
@@ -417,7 +477,11 @@ document.addEventListener('click', function (e) {
   if (!b) return;
   var k = b.getAttribute('data-add');
   haptic('light');
-  if (k === 'wallet') { if (window.UI.addWallet) window.UI.addWallet(); }
+  if (k === 'wallet') {
+    // 1.0.4: выбор «Кошелёк / Я должен / Мне должны» (debts.js); до его загрузки - кошелёк
+    if (window.UI.addToStrip) window.UI.addToStrip();
+    else if (window.UI.addWallet) window.UI.addWallet();
+  }
   else if (window.UI.addCat) { window.UI.addCat(k); }
 });
 
@@ -613,8 +677,8 @@ function renderWallets() {
     .sort(function (a, b) { return a.order - b.order; });
   var strip = $('fieldWallets').querySelector('.strip');
   var dots = $('walDots');
-  // серая «+»-плитка добавления в конце ленты кошельков
-  var items = ws.concat([{ __add: 'wallet' }]);
+  // 1.0.4: за кошельками - долги (не архивные), в конце серая «+»-плитка добавления
+  var items = ws.concat(Engine.debtsActive(S).map(function (d) { return { __debt: d }; }), [{ __add: 'wallet' }]);
   var pages = Engine.pageCount(items.length, Engine.PAGE_WALLETS);
 
   // страницу читаем ДО подмены содержимого: после innerHTML прокрутка уже нулевая,
@@ -631,7 +695,9 @@ function renderWallets() {
   // пустыми — повторов нет, ход прокрутки кратен ширине окна.
   var html = chunk(items, Engine.PAGE_WALLETS).map(function (page) {
     return '<div class="wpage">' + page.map(function (w) {
-      return w.__add ? addWalletTileHtml() : walletHtml(w, Engine.walletBalance(S, w.id));
+      if (w.__add) return addWalletTileHtml();
+      if (w.__debt) return debtTileHtml(w.__debt);
+      return walletHtml(w, Engine.walletBalance(S, w.id));
     }).join('') + '</div>';
   }).join('');
   strip.innerHTML = html;
@@ -886,7 +952,7 @@ function renderMenu() {
   }
 
   var dark = S.ui.theme === 'dark';
-  $('mThemeInfo').textContent = dark ? 'Ночная' : 'Дневная';
+  $('mThemeInfo').textContent = dark ? 'Тёмная' : 'Светлая';   // «тёмная/светлая», не «ночная/дневная» (Алексей 14.10)
   // Иконка = эмблема ТЕКУЩЕЙ темы: месяц у ночной, солнце у дневной. Подпись и значок
   // всегда согласованы; сам тап по-прежнему переключает тему.
   var sw = $('mThemeSwatch');
@@ -929,7 +995,7 @@ function unfmt(s) {
   var n = Engine.parseNum(String(s == null ? '' : s).replace(/[^\d,.−\-]/g, ''));
   return isFinite(n) ? n : 0;
 }
-function numEl(c) { return c.querySelector(c.dataset.kind === 'wallet' ? '.cbal' : '.cnum'); }
+function numEl(c) { return c.querySelector(c.dataset.kind === 'wallet' || c.dataset.kind === 'debt' ? '.cbal' : '.cnum'); }
 // подпись могла быть ужата до «1,23 млн» (fitOne) - настоящее число лежит в data-full
 function valOf(el) { var f = el.getAttribute('data-full'); return unfmt(f !== null ? f : el.textContent); }
 function eachVal(fn) {
@@ -1021,6 +1087,9 @@ function openDlg(o) {
   // Свайп-вниз по шапке закрывает только те окна, что сами себя пометят (список
   // кошельков). Каждое новое окно стартует без метки — прошлая на нём не остаётся.
   $('dlg').classList.remove('dlg-swipe');
+  // o.stickyBtns: кнопки закреплены внизу окна, содержимое прокручивается над ними
+  // (предпросмотр импорта: «Загрузить» видно без прокрутки на любом экране)
+  $('dlg').classList.toggle('dlg-sticky', !!o.stickyBtns);
   var t = $('dlgTitle');
   t.textContent = o.title || ''; t.hidden = !o.title;
   var b = $('dlgBody');
@@ -1071,19 +1140,25 @@ function closeDlg() {
 }
 function dlgOpen() { return !$('dlg').hidden; }
 
+// onCancel - закрыли без «ОК» (кнопка отмены, фон, свайп)
 function dlgConfirm(o) {
   o = o || {};
+  var okd = false;
   openDlg({
     title: o.title || '',
     body: o.text ? esc(o.text) : '',
     buttons: [
       { label: o.cancelLabel || 'Отмена', cls: 'nav' },
-      { label: o.okLabel || 'Да', cls: o.danger ? 'danger' : 'primary', onClick: function () { if (o.onOk) o.onOk(); } }
-    ]
+      { label: o.okLabel || 'Да', cls: o.danger ? 'danger' : 'primary', onClick: function () { okd = true; if (o.onOk) o.onOk(); } }
+    ],
+    onClose: o.onCancel ? function () { if (!okd) o.onCancel(); } : null
   });
+  // stack: длинные подписи - кнопки столбиком во всю ширину (как у пейволла), не в две строки
+  if (o.stack) { var bb = $('dlgBtns'); if (bb) bb.classList.add('pw-btns'); }
 }
-function dlgAlert(text, title) {
-  openDlg({ title: title || '', body: esc(text || ''), buttons: [{ label: 'Понятно', cls: 'primary' }] });
+// onClose - после закрытия (любым способом): например, вернуть форму, из которой пришли
+function dlgAlert(text, title, onClose) {
+  openDlg({ title: title || '', body: esc(text || ''), buttons: [{ label: 'Понятно', cls: 'primary' }], onClose: onClose });
 }
 function dlgPrompt(o) {
   o = o || {};
@@ -1230,7 +1305,7 @@ var toastTimer = null;
 function hideToast() {
   clearTimeout(toastTimer); toastTimer = null;
   $('toast').hidden = true;
-  $('toastBtn').onclick = null;
+  $('toastBtn').onclick = null; $('toastBtn').hidden = true;
 }
 function toast(text, o) {
   o = o || {};
@@ -1373,7 +1448,9 @@ var MAIN_HINT_DEFAULT = (function () {
 var MAIN_HINTS = {
   balance: 'Сначала укажите, сколько у вас сейчас в кошельке: тап по кошельку → «Изменить баланс».',
   fill: 'Кружок - траты к лимиту: зелёный - в норме, оранжевый - близко к лимиту, красный - лимит превышен, серый - лимита нет.',
-  taps: 'Тап по плитке - её операции и детали. Долгий тап - изменить порядок и иконку.'
+  taps: 'Тап по плитке - её операции и детали. Долгий тап - изменить порядок и иконку.',
+  // 14.10: один раз после первого долга (подчиняется общему выключателю подсказок)
+  debts: 'Долги не входят в «В кошельках»: их итог - в «Аналитике» → «Капитал и обязательства».'
 };
 function mainHintText(key) { return key === 'mainDrag' ? MAIN_HINT_DEFAULT : (MAIN_HINTS[key] || ''); }
 // есть ли на экране хоть один ЦВЕТНОЙ (не серый) кружок расхода — тогда уместна подсказка про цвет
@@ -1386,12 +1463,15 @@ function needsBalance() {
   if (S.tx.length) return false;
   return S.wallets.some(function (w) { return !w.hidden && w.base === 0; });
 }
+// на главном есть плитка долга (подсказка «Долги не входят в «В кошельках»»)
+function hasDebtTile() { return !!document.querySelector('#app .circle[data-kind="debt"]'); }
 // какую подсказку главного экрана показывать сейчас (null — никакую)
 function mainHintKey() {
   var haveTiles = document.querySelectorAll('#app .circle[data-kind="wallet"]').length > 0 &&
                   document.querySelectorAll('#app .circle[data-kind="exp"]').length > 0;
   if (!haveTiles || overlayBlocks() || editModeOn() || document.body.classList.contains('dragging')) return null;
   if (hintShouldShow('balance') && needsBalance()) return 'balance';
+  if (hintShouldShow('debts') && hasDebtTile()) return 'debts';
   if (hintShouldShow('mainDrag')) return 'mainDrag';
   if (hintShouldShow('fill') && hasColorCircle()) return 'fill';
   if (hintShouldShow('taps')) return 'taps';
@@ -1402,7 +1482,9 @@ function updateMainHint() {
   // карточка, меню, аналитика, онбординг, окно) его прячет. Режим правки гасит CSS.
   // Карточка «Сохрани копию» (nudges.js) стоит внизу на месте «плюса» и подсказки:
   // пока она видна, их прячем.
-  var rm = $('remind'), remindOn = !!rm && !rm.hidden;
+  // 1.0.4: баннер просрочки долга (debts.js) стоит на том же месте и так же гасит «плюс»
+  var rm = $('remind'), dw = $('debtWarn');
+  var remindOn = (!!rm && !rm.hidden) || (!!dw && !dw.hidden);
   var fab = $('fabAdd');
   if (fab) fab.hidden = !!topOverlay() || remindOn;
   var el = $('mainHint');
@@ -1456,6 +1538,10 @@ function resolveDrop(srcKind, srcId, tgtKind, tgtId) {
   if (srcKind === 'wallet' && tgtKind === 'exp') return { kind: 'exp', walletId: srcId, catId: tgtId };
   if (srcKind === 'inc' && tgtKind === 'wallet') return { kind: 'inc', catId: srcId, walletId: tgtId };
   if (srcKind === 'wallet' && tgtKind === 'wallet' && tgtId !== srcId) return { kind: 'transfer', walletId: srcId, toWalletId: tgtId };
+  // 1.0.4 долги: кошелёк → долг = платёж («я должен») / одолжил («мне должны»),
+  // долг → кошелёк = взял в долг / вернули
+  if (srcKind === 'wallet' && tgtKind === 'debt') return { kind: 'debtpay', walletId: srcId, debtId: tgtId };
+  if (srcKind === 'debt' && tgtKind === 'wallet') return { kind: 'debttake', debtId: srcId, walletId: tgtId };
   return null;
 }
 
@@ -1506,13 +1592,20 @@ function stripScrolls(el, pointerType) {
 // ПОД пальцем, сам листает — и сетки (.pages), и лента кошельков (.strip)
 // переворачиваются ЦЕЛОЙ страницей: у ленты они теперь такие же, по четыре карточки.
 // Подкрутки по пикселям больше нет. Тот же приём, что и в режиме правки (edit.js).
-var D_EDGE_PAD = 24, D_EDGE_HOLD = 500;
+// Зона края считается от края ЭКРАНА, а не от рамки поля (баг 12.10, телефон): рамка ленты
+// отстоит от края экрана, и палец, упёртый в самый край, был ВНЕ ленты - лента не листалась,
+// срабатывало только в узкой полоске ~85 px от края. Теперь край = 10% ширины экрана с каждой
+// стороны (и не меньше D_EDGE_PAD от рамки поля), а поле ищем по строке пальца.
+var D_EDGE_PAD = 24, D_EDGE_FRAC = 0.1, D_EDGE_HOLD = 500;
 var dEdge = null;   // {box, side, timer, raf} — держится, только пока палец у края
 
-function dEdgeSide(x, rect) {
+function dViewW() { return window.innerWidth || document.documentElement.clientWidth || 0; }
+function dEdgeSide(x, rect, vw) {
   if (!rect || !(rect.width > 0)) return 0;
-  if (x <= rect.left + D_EDGE_PAD) return -1;
-  if (x >= rect.right - D_EDGE_PAD) return 1;
+  if (!(vw > 0)) vw = dViewW();
+  var zone = vw > 0 ? vw * D_EDGE_FRAC : 0;
+  if (x <= Math.max(rect.left + D_EDGE_PAD, zone)) return -1;
+  if (x >= Math.min(rect.right - D_EDGE_PAD, vw > 0 ? vw - zone : Infinity)) return 1;
   return 0;
 }
 function dEdgeStop() {
@@ -1540,7 +1633,9 @@ function dFlipPage(box, side) {
 }
 function dEdgeWatch(x, y) {
   if (!drag || !drag.active) return dEdgeStop();
-  var box = boxUnder(x, y);
+  var box = boxUnder(x, y), vw = dViewW();
+  // палец у самого края экрана может быть уже за рамкой поля - берём поле той же строки
+  if (!box && vw > 0 && (x <= vw * D_EDGE_FRAC || x >= vw * (1 - D_EDGE_FRAC))) box = boxUnder(vw / 2, y);
   if (!box || box.scrollWidth - box.clientWidth <= 4) return dEdgeStop();
   var side = dEdgeSide(x, box.getBoundingClientRect());
   if (!side) return dEdgeStop();
@@ -1742,15 +1837,19 @@ function catName(id) {
   return f ? f.cat.name : '';
 }
 function walletName(id) { var w = Engine.findWallet(S, id); return w ? w.name : ''; }
-
-function amEnds(op) {
-  if (op.kind === 'exp') return { from: walletName(op.walletId), to: catName(op.catId) };
-  if (op.kind === 'inc') return { from: catName(op.catId), to: walletName(op.walletId) };
-  return { from: walletName(op.walletId), to: walletName(op.toWalletId) };
+function debtName(id) { var d = Engine.findDebt(S, id); return d ? d.name : ''; }
+// 1.0.4: подпись операции с долгом по виду долга и направлению (одна на лист суммы, тост, ленту)
+function debtOpLabel(kind, debtId) {
+  var d = Engine.findDebt(S, debtId), owed = !!d && d.type === 'owed';
+  if (kind === 'debtpay') return owed ? 'Даёте в долг' : 'Платёж по долгу';
+  return owed ? 'Вам вернули долг' : 'Берёте в долг';
 }
+
 function amEndEls(op) {
   if (op.kind === 'exp') return [circleEl('wallet', op.walletId), circleEl('exp', op.catId)];
   if (op.kind === 'inc') return [circleEl('inc', op.catId), circleEl('wallet', op.walletId)];
+  if (op.kind === 'debtpay') return [circleEl('wallet', op.walletId), circleEl('debt', op.debtId)];
+  if (op.kind === 'debttake') return [circleEl('debt', op.debtId), circleEl('wallet', op.walletId)];
   return [circleEl('wallet', op.walletId), circleEl('wallet', op.toWalletId)];
 }
 function circleEl(kind, id) {
@@ -1812,8 +1911,29 @@ function amPaint() {
   var over = v > AM_TOP;
   el.classList.toggle('zero', !(v > 0));
   el.classList.toggle('over', over);
-  $('amMini').textContent = over ? AM_TOP_MSG : (hasOp ? Engine.fmtTyped(amExpr) : '');
+  var mini = over ? AM_TOP_MSG : (hasOp ? Engine.fmtTyped(amExpr) : '');
+  // 1.0.4: платёж по долгу со ставкой - сразу видно, сколько уйдёт в проценты, сколько в долг
+  // Весь остаток - закрывающий платёж (payoff), проценты из него не отделяются (14.10).
+  // Р5 ревью 15.10: считает сама запись (Engine.previewPay - payDebt на копии этого долга) с
+  // выбранной датой: задним числом показывали 0, а записывалось 1 000
+  if (!over && amOp && amOp.kind === 'debtpay' && v > 0 && amOp.debtId && !amPayoff(v)) {
+    var sp = Engine.previewPay(S, { debtId: amOp.debtId, amount: v, date: clampDate(amDate || Engine.today()) });
+    if (sp.interest > 0) mini = (hasOp ? Engine.fmtTyped(amExpr) + ' · ' : '') + 'из них проценты ' + money(sp.interest) + '\u00a0₽';
+  }
+  $('amMini').textContent = mini;
   $('amMini').classList.toggle('warn', over);
+  // 14.10: «Весь остаток X ₽» - погасить долг (вернуть «мне должны») целиком одним касанием
+  var rest = amRest(), all = $('amAll');
+  if (all) {
+    all.hidden = !(rest > 0);
+    if (rest > 0) {
+      all.textContent = 'Весь остаток ' + money(rest) + '\u00a0₽';
+      all.classList.toggle('on', Math.abs(v - rest) < 0.005);
+      // на 640 по высоте чип и разовая подсказка про калькулятор вместе обрезали сумму (qa 14.10):
+      // здесь подсказку не показываем, она дождётся обычной операции
+      var ah = $('amHint'); if (ah) ah.hidden = true;
+    }
+  }
   // «Подтвердить» гаснет и пока не выбраны оба конца (кнопочный путь): без кошелька/категории
   // операцию записать нельзя. У drag концы всегда заданы - для него условие всегда истинно.
   $('amConfirm').disabled = !(v > 0) || over || !Engine.amountReady(amOp);
@@ -1827,10 +1947,10 @@ function clampDate(v) {
   var t = Engine.today();
   return (typeof v === 'string' && v > t) ? t : v;
 }
-// вешается на любое поле type="date" под операции: предел + подрезка с тостом
+// вешается на поле даты операции (своё окно, picker.js): предел + подрезка с тостом
 function noFutureDate(el, onSet) {
   if (!el) return el;
-  el.max = Engine.today();
+  el.setAttribute('data-max', Engine.today());
   el.addEventListener('change', function () {
     if (!el.value) return;
     var c = clampDate(el.value);
@@ -1849,24 +1969,28 @@ function renderAmDate() {
   var lbl = $('amDateVal');
   if (!isT && !isY) { lbl.hidden = false; lbl.textContent = amDate.slice(8, 10) + '.' + amDate.slice(5, 7); }
   else lbl.hidden = true;
-  $('amDateInput').max = t;
-  $('amDateInput').value = amDate;
 }
 
 // prefill (необязательно) — сумма, которой открыть экран заранее заполненным
 // (используется «Повторить»); дата при этом всегда «сегодня».
 function openAmount(op, prefill) {
   if (!op || !op.kind) return;
-  amOp = { kind: op.kind, catId: op.catId || null, walletId: op.walletId || null, toWalletId: op.toWalletId || null };
+  amOp = { kind: op.kind, catId: op.catId || null, walletId: op.walletId || null, toWalletId: op.toWalletId || null,
+    debtId: op.debtId || null };
+  // 1.0.4: платёж по «я должен» - сумма сразу подставлена: ежемесячный платёж
+  if (prefill == null && op.kind === 'debtpay') {
+    var dd = Engine.findDebt(S, op.debtId);
+    if (dd && dd.type === 'owe' && dd.pay > 0) prefill = dd.pay;
+  }
   amExpr = (prefill != null && prefill > 0) ? String(prefill).replace('.', ',') : '';
   amDate = Engine.today();
   amPathRefresh();
   var kindLbl = { exp: 'Расход', inc: 'Доход', transfer: 'Перевод' };
-  $('amKind').textContent = kindLbl[amOp.kind] || '';
+  $('amKind').textContent = (op.kind === 'debtpay' || op.kind === 'debttake') ? debtOpLabel(op.kind, op.debtId) : (kindLbl[amOp.kind] || '');
   renderAmDate();
   amPaint();
   var ah = $('amHint');
-  if (ah) ah.hidden = !hintShouldShow('amount');
+  if (ah) ah.hidden = !hintShouldShow('amount') || amRest() > 0;   // с чипом «Весь остаток» - без неё (amPaint)
   $('amount').hidden = false;
   updateMainHint();
 }
@@ -1884,6 +2008,11 @@ function amountOpen() { return !$('amount').hidden; }
 // перевод = кошелёк → кошелёк.
 function amSlotMeta(pos) {
   var k = amOp.kind;
+  // 1.0.4: платёж/взятие - конец «долг» и конец «кошелёк»
+  if (k === 'debtpay') return pos === 'from' ? { field: 'walletId', pick: 'wallet', ph: 'Выбрать кошелёк' }
+                                             : { field: 'debtId', pick: 'debt', ph: 'Выбрать долг' };
+  if (k === 'debttake') return pos === 'from' ? { field: 'debtId', pick: 'debt', ph: 'Выбрать долг' }
+                                              : { field: 'walletId', pick: 'wallet', ph: 'Выбрать кошелёк' };
   if (pos === 'from') {
     if (k === 'inc') return { field: 'catId', pick: 'inc', ph: 'Выбрать источник' };
     return { field: 'walletId', pick: 'wallet', ph: 'Выбрать кошелёк' };
@@ -1895,6 +2024,7 @@ function amSlotMeta(pos) {
 function amSlotName(m) {
   var id = amOp[m.field];
   if (!id) return '';
+  if (m.pick === 'debt') return debtName(id);
   return m.pick === 'wallet' ? walletName(id) : catName(id);
 }
 // Каждый конец - фишка. Заполненная показывает имя (textContent = имя, как и было при drag,
@@ -1904,15 +2034,76 @@ function amPathRefresh() {
   ['from', 'to'].forEach(function (pos) {
     var m = amSlotMeta(pos), name = amSlotName(m), empty = !name;
     var el = $(pos === 'from' ? 'amFrom' : 'amTo');
+    el.classList.toggle('am-slot-empty', empty);
     el.innerHTML = '<span class="am-pick' + (empty ? ' empty' : '') + '" role="button" tabindex="0" data-pos="' +
-      pos + '">' + esc(empty ? m.ph : name) + '</span>';
+      pos + '" data-short="' + esc(AM_SHORT[m.pick] || m.ph) + '">' + esc(empty ? m.ph : name) + '</span>';
   });
+  amFitPath();
+  try { requestAnimationFrame(amFitPath); } catch (e) {}
+}
+// Ревью 12.10 №7: невыбранная фишка («Выбрать кошелёк») не сжимается (CSS .am-slot-empty) -
+// сжимается заполненная, с многоточием. Не помещается ряд целиком (узкий экран, крупный шрифт
+// телефона) или заполненной соседке остаётся меньше 96px - приглашение короче: «Кошелёк?».
+// Меряем по факту раскладки, а не по ширине экрана: крупный системный шрифт ширину не меняет.
+var AM_SHORT = { wallet: 'Кошелёк?', debt: 'Долг?', inc: 'Источник?', exp: 'Категория?' };
+// Баг 12.10 (телефон): «Накоплен… → Наличн…» при свободном месте - справа пустовал спейсер
+// 44 px (держит ряд по центру), плюс поля стрелки и фишек. Обрезана заполненная фишка -
+// шапка «тесная» (.am-tight): спейсер убран, стрелка и поля фишек уже; многоточие остаётся,
+// только если имя и так не влезает.
+function amCut(el) { return el.scrollWidth > el.clientWidth + 1; }
+function amFitPath() {
+  var path = $('amFrom') && $('amFrom').parentNode;
+  if (!path || !path.clientWidth) return;
+  var head = path.parentNode;
+  if (head && head.classList) {
+    head.classList.remove('am-tight');
+    var fullNow = path.querySelectorAll('.am-pick:not(.empty)');
+    for (var q = 0; q < fullNow.length; q++) if (amCut(fullNow[q])) { head.classList.add('am-tight'); break; }
+  }
+  var chips = path.querySelectorAll('.am-pick.empty');
+  if (!chips.length) return;
+  function tight() {
+    if (path.scrollWidth > path.clientWidth + 1) return true;
+    var full = path.querySelectorAll('.am-pick:not(.empty)');
+    for (var i = 0; i < full.length; i++) if (full[i].getBoundingClientRect().width < 96 && full[i].scrollWidth > full[i].clientWidth + 1) return true;
+    for (var j = 0; j < chips.length; j++) if (chips[j].scrollWidth > chips[j].clientWidth + 1) return true;
+    return false;
+  }
+  if (!tight()) return;
+  for (var k = 0; k < chips.length; k++) chips[k].textContent = chips[k].getAttribute('data-short');
 }
 function amOpenPicker(pos) {
   if (!amOp) return;
   var m = amSlotMeta(pos);
   if (m.pick === 'wallet') amPickWallet(m.field);
+  else if (m.pick === 'debt') amPickDebt();
   else amPickCat(m.field, m.pick);
+}
+// 1.0.4: выбрать другой долг того же вида (платёж из «я должен» в «мне должны» сменил бы смысл операции)
+function amPickDebt() {
+  var cur = Engine.findDebt(S, amOp.debtId);
+  var list = Engine.debtsActive(S).filter(function (d) { return !cur || d.type === cur.type; });
+  openDlg({
+    title: 'Выберите долг',
+    body: '<div class="wgrid">' + list.map(function (d) {
+      return '<button type="button" class="wtile dtile ' + d.type + '" data-id="' + esc(d.id) + '">' +
+        '<span class="ico">' + debtMark(d) + '</span>' +
+        '<span class="wt-n">' + esc(d.name) + '</span>' +
+        '<span class="wt-b">' + fmt(Engine.debtBalance(S, d.id)) + '\u00a0₽</span></button>';
+    }).join('') + '</div>',
+    buttons: [{ label: 'Отмена', cls: 'nav' }],
+    onOpen: function () {
+      var grid = $('dlgBody').querySelector('.wgrid');
+      if (!grid) return;
+      grid.addEventListener('click', function (e) {
+        var b = e.target.closest ? e.target.closest('.wtile') : null;
+        if (!b) return;
+        amOp.debtId = b.getAttribute('data-id');
+        $('amKind').textContent = debtOpLabel(amOp.kind, amOp.debtId);
+        closeDlg(); amPathRefresh(); amPaint(); haptic('light');
+      });
+    }
+  });
 }
 function amPickWallet(field) {
   var exclude = amOp.kind === 'transfer'
@@ -2012,12 +2203,115 @@ function soundTx(kind, catId, mo) {
   sound(Engine.txSound(kind, lvl));
 }
 
+// Отказ записи/правки операции с долгом - один текст на запись (экран суммы) и на правку
+// (окно «Операция»): 'over' - больше остатка (max - остаток без этой операции),
+// 'before-created' - дата раньше заведения долга.
+function debtSaveErr(m, d, max) {
+  if (m === 'before-created') {
+    var c = (d && d.createdDate) || '';
+    return 'Долг заведён ' + c.slice(8, 10) + '.' + c.slice(5, 7) + ' - более ранние платежи уже учтены в остатке.';
+  }
+  // Р3 ревью 15.10: правка «взял ещё» вниз или перенос даты увели бы остаток в минус - максимума
+  // у такой правки нет
+  if (max == null) return DEBT_NEG_MSG + ' Проверьте сумму и дату или исправьте остаток в карточке долга - «Настроить».';
+  return d && d.type === 'owed'
+    ? 'Вам должны меньше: ' + money(max) + '\u00a0₽. Проверьте сумму или исправьте остаток в карточке долга - «Настроить».'
+    : 'Это больше, чем осталось по долгу: ' + money(max) + '\u00a0₽. Проверьте сумму или исправьте остаток в карточке долга - «Настроить».';
+}
+
+var DEBT_NEG_MSG = 'Остаток долга станет меньше нуля.';
+// Р3 ревью 15.10: удаление операции долга - тем же путём, что запись: удалить «взял ещё», после
+// которого остаток стал бы меньше нуля, нельзя (Engine.deleteTx бросает 'over'). Своё окно на «вы»
+// вместо тихой ошибки. true - удалено.
+function delDebtTx(id) {
+  try { Engine.deleteTx(S, id); return true; } catch (e) {
+    if (!(e && e.message === 'over')) throw e;
+    dlgAlert('Нельзя удалить: остаток долга станет меньше нуля. Сначала исправьте более поздние платежи по этому долгу.', 'Не удалилось');
+    return false;
+  }
+}
+
+// 14.10: остаток долга, который можно закрыть с экрана суммы: платёж по «я должен» или возврат
+// по «мне должны» (не «взяли ещё» / «дали ещё»). 0 - чипа «Весь остаток» нет.
+function amRest() {
+  if (!amOp || !amOp.debtId) return 0;
+  var d = Engine.findDebt(S, amOp.debtId);
+  if (!d || d.archived) return 0;
+  if (!((amOp.kind === 'debtpay' && d.type === 'owe') || (amOp.kind === 'debttake' && d.type === 'owed'))) return 0;
+  // Р13 ревью 15.10: остаток «сейчас» есть только после последней операции долга. Задним числом
+  // раньше неё «весь остаток» уменьшил бы остаток перед более поздним платежом и его проценты -
+  // долг ушёл бы в минус, запись отказала бы на ту же сумму. Такой датой чипа нет (Engine.payDebt
+  // такой платёж закрывающим и не считает).
+  var last = Engine.debtLastDate(S, d.id);
+  if (last && amDate && amDate < last) return 0;
+  var b = Engine.debtBalance(S, d.id);
+  return b > 0 ? b : 0;
+}
+// платёж «я должен» ровно на весь остаток - закрывающий (Engine.payDebt payoff): целиком в тело,
+// проценты месяца не отделяются, иначе долг остался бы не ноль (решение 14.10)
+function amPayoff(v) {
+  if (!amOp || amOp.kind !== 'debtpay') return false;
+  var rest = amRest();
+  return rest > 0 && Math.abs(v - rest) < 0.005;
+}
+function amFillRest() {
+  var rest = amRest();
+  if (!(rest > 0)) return;
+  amExpr = String(rest).replace('.', ',');
+  haptic('light');
+  amPaint();
+}
+
+// Р12 ревью 15.10: экран суммы открывают и поверх карточки («Повторить» в операции, «Записать
+// платёж») - открытая карточка кошелька/долга/категории показывает новый баланс и строку сразу,
+// и после записи, и после «Отменить» в тосте.
+function amCardRefresh() { if (window.UI.renderCard && cardOpen()) window.UI.renderCard(); }
+
+// 1.0.4: запись операции с долгом (Engine.payDebt / takeDebt). Платёж - одна запись на всю
+// сумму (проценты - её часть, не расход; решение 13.10), «Отменить» убирает её.
+function amSaveDebt(v) {
+  var op = amOp, r, d = Engine.findDebt(S, op.debtId);
+  if (!d) { dlgAlert('Долг не найден.', 'Не сохранилось'); return; }
+  amDate = clampDate(amDate);
+  var payoff = amPayoff(v);
+  try {
+    r = (op.kind === 'debtpay' ? Engine.payDebt : Engine.takeDebt)(S,
+      { debtId: d.id, walletId: op.walletId, amount: v, date: amDate, payoff: payoff });
+  } catch (e) {
+    var m = e && e.message;
+    // e.max - сколько можно внести этой датой (задним числом меньше нынешнего остатка: проценты
+    // следующих месяцев станут меньше)
+    dlgAlert((m === 'over' || m === 'before-created') ? debtSaveErr(m, d, e.max)
+      : m === 'amount-max' ? AM_TOP_MSG
+      : (m === 'date-future' || m === 'date') ? FUTURE_MSG + '.'
+      : 'Сумма должна быть больше нуля.', 'Не сохранилось');
+    return;
+  }
+  save(); closeAmount(); render(); amCardRefresh(); haptic('medium');
+  sound('transfer');
+  var lbl = debtOpLabel(op.kind, d.id) + ': ' + money(v) + '\u00a0₽' +
+    (r.interest > 0 ? ', из них проценты ' + money(r.interest) + '\u00a0₽' : '');
+  toast(lbl, {
+    action: 'Отменить',
+    onAction: function () {
+      if (!delDebtTx(r.txs[0].id)) return;
+      save(); render(); amCardRefresh(); if (window.UI.debtsChanged) window.UI.debtsChanged();
+    }
+  });
+  if (window.UI.debtTxSaved) window.UI.debtTxSaved(d.id);   // баннер просрочки гаснет после записи
+  if (window.UI.debtsChanged) window.UI.debtsChanged();
+  // остаток дошёл до нуля - предложить «Долг погашен» (уйдёт в архив)
+  if (!(Engine.debtBalance(S, d.id) > 0) && window.UI.offerArchive) window.UI.offerArchive(d.id);
+  if (window.Nudges && window.Nudges.afterTx) { try { window.Nudges.afterTx(); } catch (e) {} }
+}
+
 function amSave() {
   if (!amOp) return;
   if (!Engine.amountReady(amOp)) return;   // концы не выбраны (кнопочный путь) - молчим
   var v = evalExpr(amExpr);
   if (!(v > 0)) return;
   if (v > AM_TOP) { dlgAlert(AM_TOP_MSG, 'Не сохранилось'); return; }
+  if (amOp.kind === 'debtpay' || amOp.kind === 'debttake') return amSaveDebt(v);
   var op = amOp, tx;
   amDate = clampDate(amDate);              // последний заслон: вперёд датировать нельзя
   var mo = Engine.ym(amDate);
@@ -2033,7 +2327,7 @@ function amSave() {
       : 'Сумма должна быть больше нуля.', 'Не сохранилось');
     return;
   }
-  save(); closeAmount(); render(); haptic('medium');
+  save(); closeAmount(); render(); amCardRefresh(); haptic('medium');
   soundTx(op.kind, op.catId, mo);
   if (window.UI.animateTx) {
     var els = amEndEls(op);
@@ -2041,7 +2335,7 @@ function amSave() {
   }
   toast(txLabel(tx, op), {
     action: 'Отменить',
-    onAction: function () { Engine.deleteTx(S, tx.id); save(); render(); }
+    onAction: function () { Engine.deleteTx(S, tx.id); save(); render(); amCardRefresh(); }
   });
   // окно оценки RuStore: один раз, сразу после удачной записи (решение - guards.js)
   if (window.Nudges && window.Nudges.afterTx) { try { window.Nudges.afterTx(); } catch (e) {} }
@@ -2049,6 +2343,7 @@ function amSave() {
 
 $('amCancel').addEventListener('click', closeAmount);
 $('amConfirm').addEventListener('click', amSave);
+$('amAll').addEventListener('click', amFillRest);
 // «+» на главном экране открывает выбор типа операции
 $('fabAdd').addEventListener('click', openAdd);
 // тап по концу-фишке в шапке листа суммы открывает пикер кошелька/категории
@@ -2060,13 +2355,23 @@ $('amKeys').addEventListener('click', function (e) {
   var b = e.target.closest('.amk');
   if (b) amKey(b.getAttribute('data-k'));
 });
+// своё окно календаря (1.0.4, вместо системного): вперёд дат нет - денег, которых ещё не
+// потратили, в факте быть не должно (дни после сегодня в календаре неактивны)
+function amOpenCal() {
+  if (!window.Picker) return;
+  // Р14 ревью 15.10: у операции с долгом дни до его заведения неактивны (такую дату запись отвергает)
+  var dd = amOp && amOp.debtId ? Engine.findDebt(S, amOp.debtId) : null;
+  Picker.date({ value: amDate, max: Engine.today(), min: dd ? dd.createdDate : null, title: 'Дата операции',
+    onPick: function (v) { if (v) { amDate = clampDate(v); renderAmDate(); amPaint(); } } });
+}
 $('amDate').addEventListener('click', function (e) {
+  if (e.target.closest('#amPick')) { amOpenCal(); return; }
   var b = e.target.closest('.amd[data-d]');
   if (!b) return;
   amDate = b.getAttribute('data-d') === 'yest' ? shiftDate(Engine.today(), -1) : Engine.today();
   renderAmDate();
+  amPaint();   // подсказка процентов и чип «Весь остаток» зависят от даты (Р5, Р13)
 });
-noFutureDate($('amDateInput'), function (v) { amDate = v; renderAmDate(); });
 
 // ---------- меню ----------
 function openMenu() {
@@ -2167,7 +2472,7 @@ var PREFS = [
     ic: '<path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z"/><path d="M15.6 9.6a3.4 3.4 0 0 1 0 4.8"/><path d="M18.2 7a7 7 0 0 1 0 10"/>' },
   { id: 'snHaptic', key: 'haptics', t: 'Вибрация', s: 'отклик на касания', c: 'c-coral',
     ic: '<rect x="8.5" y="3" width="7" height="18" rx="2.2"/><path d="M10.8 6h2.4"/><path d="M5 9.5v5M19 9.5v5"/><path d="M2.2 11v2M21.8 11v2"/>' },
-  { id: 'snHints', key: 'hints', t: 'Подсказки', s: 'хомяк объясняет экраны', c: 'c-teal',
+  { id: 'snHints', key: 'hints', t: 'Подсказки', s: '«Хомяк» объясняет экраны', c: 'c-teal',
     ic: '<path d="M9.5 18h5"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 1 3.6 10.8c-.6.5-.9 1-.9 1.7v.5h-5.4v-.5c0-.7-.3-1.2-.9-1.7A6 6 0 0 1 12 3z"/>' }
 ];
 var REMIND_IC = '<path d="M6.5 16.5V11a5.5 5.5 0 0 1 11 0v5.5l1.5 1.5H5z"/><path d="M10 20.5h4"/>';
@@ -2235,6 +2540,65 @@ function openPrefs() {
     }
   });
 }
+// 1.0.4 (решение Алексея 11.10): выгрузка и загрузка таблиц - одна строка «Таблица Excel» в
+// «Копии данных» (две строки + отмена импорта распирали подменю: на 320x640 оно
+// прокручивалось). Строка открывает своё окно (тот же #dlg): «Выгрузить в Excel»,
+// «Загрузить из таблицы», «Отменить последний импорт» (если есть что отменять). «Закрыть»,
+// «назад» и тап по фону возвращают в «Копию данных». Только «Полный доступ»: в бесплатной
+// версии строка с замком ведёт в баннер покупки, «Позже» возвращает в «Копию данных».
+// Отмена последнего импорта - защита данных, а не платная функция: если есть что отменять,
+// в бесплатной версии строка открывает окно без замка, замки - на «Выгрузить»/«Загрузить».
+var EXCEL_IC = '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 9.5h16M4 14.5h16M10 9.5V20"/>';
+var EXPORT_IC = '<path d="M12 14.5v-11"/><path d="M7.5 8L12 3.5 16.5 8"/><path d="M4 14.5v4A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-4"/>';
+var IMPORT_IC = '<path d="M12 3.5v11"/><path d="M7.5 10L12 14.5 16.5 10"/><path d="M4 14.5v4A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-4"/>';
+var UNDO_IC = '<path d="M9 5.5L4.5 10 9 14.5"/><path d="M4.5 10H14a5.5 5.5 0 0 1 0 11h-3"/>';
+// Строка-действие подменю: вид строки-тумблера, справа замок (если locked) или ничего.
+function actRowHtml(id, cls, ic, t, sub, locked) {
+  return '<button type="button" class="set-row ' + cls + (locked ? ' locked' : '') + '" id="' + id + '"' +
+    (locked ? ' aria-label="' + esc(t) + ' - нужен полный доступ"' : '') + '>' +
+    '<span class="mi-ic" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + ic + '</svg></span>' +
+    '<span class="set-tx"><span class="set-t">' + esc(t) + '</span><span class="set-s">' + esc(sub) + '</span></span>' +
+    (locked ? '<span class="set-lock" aria-hidden="true">🔒</span>' : '') + '</button>';
+}
+function lastImport() { return (window.Import && Import.lastBatch) ? Import.lastBatch(S) : null; }
+function tableRowHtml() {
+  return actRowHtml('cpTable', 'c-teal', EXCEL_IC, 'Таблица Excel', 'выгрузить или загрузить', !hasFull() && !lastImport());
+}
+function undoImportRowHtml() {
+  var b = lastImport();
+  if (!b) return '';
+  var sub = Engine.fmt(b.count) + ' ' + Engine.plural(b.count, 'операция', 'операции', 'операций') + (b.name ? ' из «' + b.name + '»' : '');
+  return actRowHtml('tbUndoImport', 'c-pink', UNDO_IC, 'Отменить последний импорт', sub, false);
+}
+function openTable() {
+  var full = hasFull();
+  if (!full && !lastImport()) { if (window.UI.paywall) window.UI.paywall(openCopy); return; }
+  openDlg({
+    title: 'Таблица Excel',
+    body: '<div class="set-p">' + esc('Выгрузите операции файлом для Excel или загрузите их из таблицы другого приложения. Перед загрузкой покажем, что добавится.') + '</div>' +
+      '<div class="set-list set-gap">' +
+      actRowHtml('tbExport', 'c-teal', EXPORT_IC, 'Выгрузить в Excel', 'отправить файл .xlsx', !full) +
+      actRowHtml('tbImport', 'c-coral', IMPORT_IC, 'Загрузить из таблицы', 'CSV или Excel из другого приложения', !full) +
+      undoImportRowHtml() + '</div>',
+    buttons: [{ label: 'Закрыть', cls: 'nav' }],
+    onClose: openCopy,
+    onOpen: function () {
+      // дальше системное окно («Отправить» / выбор файла) - назад в «Копию данных» не нужно
+      $('tbExport').addEventListener('click', function () {
+        if (!hasFull()) { dlgOnClose = null; if (window.UI.paywall) window.UI.paywall(openTable); return; }
+        dlgOnClose = null; closeDlg(); closeMenu();
+        if (window.Backup && window.Backup.exportXlsx) window.Backup.exportXlsx();
+      });
+      $('tbImport').addEventListener('click', function () {
+        if (!hasFull()) { dlgOnClose = null; if (window.UI.paywall) window.UI.paywall(openTable); return; }
+        dlgOnClose = null;
+        if (window.ImportUI) window.ImportUI.pick();
+      });
+      var un = $('tbUndoImport');
+      if (un) un.addEventListener('click', function () { if (window.ImportUI) window.ImportUI.askUndo(); });
+    }
+  });
+}
 // «Копия данных»: сохранить и восстановить - те же Backup.backup / Backup.pickRestore, что
 // стояли на плитках; перед ними закрываем окно и меню (дальше системное окно выбора файла).
 function openCopy() {
@@ -2245,7 +2609,7 @@ function openCopy() {
       '<button type="button" class="btn primary" id="cpSave">Сохранить копию в файл</button>' +
       '<button type="button" class="btn ghost" id="cpRestore">Восстановить из файла</button>' +
       '</div>' +
-      '<div class="set-list set-gap">' + setRowHtml('cpRemind', 'c-green', REMIND_IC, 'Напоминать раз в месяц', 'карточка внизу экрана') + '</div>',
+      '<div class="set-list set-gap">' + tableRowHtml() + setRowHtml('cpRemind', 'c-green', REMIND_IC, 'Напоминать раз в месяц', 'карточка внизу экрана') + '</div>',
     buttons: [{ label: 'Закрыть', cls: 'nav' }],
     onOpen: function () {
       paintCopy();
@@ -2257,6 +2621,7 @@ function openCopy() {
         closeDlg(); closeMenu();
         if (window.Backup && window.Backup.pickRestore) window.Backup.pickRestore();
       });
+      $('cpTable').addEventListener('click', openTable);
       $('cpRemind').addEventListener('click', function () {
         if (window.Nudges && window.Nudges.toggleRemind) window.Nudges.toggleRemind();
         paintCopy();
@@ -2340,7 +2705,7 @@ $('mAbout').addEventListener('click', function () {
           '<span class="ab-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>' +
           '<div class="ab-ttl"><b>Хомяк</b> · v' + esc(menuVersion()) + '</div>' +
         '</div>' +
-        '<p class="ab-lead">Учёт личных финансов без облака и <b>без рекламы</b>. Кошельки, категории и месячные лимиты живут только на вашем телефоне.</p>' +
+        '<p class="ab-lead">Учёт личных финансов без облака и <b>без рекламы</b>. Кошельки, категории, лимиты и долги живут только на вашем телефоне.</p>' +
 
         '<div class="ab-h">Как записывать операции</div>' +
         '<p class="ab-p">Перетаскивайте плитки: нажмите на плитку и, не отпуская, ведите пальцем на нужную.</p>' +
@@ -2348,10 +2713,12 @@ $('mAbout').addEventListener('click', function () {
           '<li>кошелёк на категорию расхода - расход</li>' +
           '<li>источник дохода на кошелёк - доход</li>' +
           '<li>кошелёк на кошелёк - перевод</li>' +
+          '<li>кошелёк на долг - платёж по долгу</li>' +
+          '<li>долг на кошелёк - взяли в долг или вам вернули</li>' +
         '</ul>' +
 
         '<div class="ab-h">Жесты и настройки</div>' +
-        '<p class="ab-p">Короткий тап по плитке открывает её операции, долгий - правку и порядок. Кошельки, категории и лимиты настраиваются в меню - хомяк сверху слева, аналитика - справа.</p>' +
+        '<p class="ab-p">Короткий тап по плитке открывает её операции, долгий - правку и порядок. Кошельки, категории и лимиты - в меню (хомяк сверху слева), долги - «+» в ленте кошельков, аналитика - справа.</p>' +
 
         '<div class="ab-h">Документы <span class="ab-ext" data-k="extNote">· ссылки ↗ откроются в браузере</span></div>' +
         '<p class="ab-linkrow"><a class="ab-link" data-ext="' + PRIVACY_URL + '" href="' + PRIVACY_URL + '">Политика конфиденциальности ↗</a></p>' +
@@ -2415,6 +2782,8 @@ window.addEventListener('resize', function () {
 // Раньше на телефоне кнопка «назад» не делала НИЧЕГО: WebView её проглатывал, и выйти
 // из карточки можно было только крестиком, а из приложения - жестом системы.
 function closeTop() {
+  // своё окно выбора (дата, список) - поверх всего, «назад» закрывает сначала его
+  if (window.Picker && Picker.isOpen()) { Picker.close(); return true; }
   switch (topOverlay()) {
     case 'onboard': $('obDone').click(); return true;   // «назад» на приветствии = «Понятно», а не выход
     case 'icons': if (window.UI.closeIconSheet) window.UI.closeIconSheet(); return true;
@@ -2546,12 +2915,14 @@ window.UI = {
   closeDlg: closeDlg, dlgOpen: dlgOpen, bindBackdropClose: bindBackdropClose, bindSwipeClose: bindSwipeClose,
   overlayFlags: overlayFlags, topOverlay: topOverlay, closeTop: closeTop,
   toast: toast, hideToast: hideToast, haptic: haptic, sound: sound, soundTx: soundTx,
-  openMenu: openMenu, closeMenu: closeMenu, openPrefs: openPrefs, openCopy: openCopy, prefsInfo: prefsInfo, makeGhost: makeGhost,
-  openAmount: openAmount, closeAmount: closeAmount, amountOpen: amountOpen, resolveDrop: resolveDrop, evalExpr: evalExpr, SNAP_MS: SNAP_MS,
+  openMenu: openMenu, closeMenu: closeMenu, openPrefs: openPrefs, openCopy: openCopy, openTable: openTable, prefsInfo: prefsInfo, makeGhost: makeGhost,
+  openAmount: openAmount, closeAmount: closeAmount, amFitPath: amFitPath, amountOpen: amountOpen, resolveDrop: resolveDrop, evalExpr: evalExpr, SNAP_MS: SNAP_MS,
   tileHtml: tileHtml, walletHtml: walletHtml, walletTileHtml: walletTileHtml, applyFill: applyFill, levelOf: levelOf, wcolor: wcolor,
   monthLabel: monthLabel, money: money, moneyInput: moneyInput, calcInput: calcInput,
-  noFutureDate: noFutureDate, clampDate: clampDate, FUTURE_MSG: FUTURE_MSG,
+  noFutureDate: noFutureDate, clampDate: clampDate, FUTURE_MSG: FUTURE_MSG, debtSaveErr: debtSaveErr,
   catName: catName, walletName: walletName,
+  debtName: debtName, debtOpLabel: debtOpLabel, debtTileHtml: debtTileHtml, DEBT_GLYPH: DEBT_GLYPH, debtMark: debtMark, rateText: rateText, rateNum: rateNum,
+  screenDay: function () { return screenDay; },
   loadFrom: loadFrom, saveBanner: saveBanner,
   openExternal: openExternal, appVersion: appVersion, shortVersion: shortVersion,
   menuVersion: menuVersion, shellVersion: shellVersion, verSuffix: verSuffix,

@@ -116,6 +116,8 @@ function syncMain() { try { if (UI.updateMainHint) UI.updateMainHint(); } catch 
 // ctxPatch - только для self-test (например, снять «демо», чтобы увидеть карточку)
 function checkRemind(ctxPatch) {
   if (remindShown() || busy()) return false;
+  // 1.0.4: баннер просрочки долга стоит на том же месте и важнее - копия подождёт
+  if (window.Debts && window.Debts.warnShown && window.Debts.warnShown()) return false;
   var c = remindCtx();
   if (ctxPatch) for (var k in ctxPatch) c[k] = ctxPatch[k];
   if (!G.backupDue(c)) return false;

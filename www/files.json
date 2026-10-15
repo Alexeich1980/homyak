@@ -1,11 +1,12 @@
 {
-  "version": "1.0.3",
+  "version": "1.0.4",
   "files": [
     "access.js",
     "anim.js",
     "backup.js",
     "boot.js",
     "capacitor.js",
+    "debts.js",
     "edit.js",
     "engine.js",
     "files.json",
@@ -79,6 +80,8 @@
     "icons-color/wifi.png",
     "icons-color/wrench.png",
     "icons.js",
+    "import-ui.js",
+    "import.js",
     "index.html",
     "license.js",
     "lock.js",
@@ -86,6 +89,7 @@
     "nudges.js",
     "pay-config.js",
     "pay.js",
+    "picker.js",
     "purchase.js",
     "seed.js",
     "sheet.js",
@@ -99,6 +103,7 @@
     "ui.js",
     "update.js",
     "vendor/fflate.min.js",
-    "version.js"
+    "version.js",
+    "xlsx.js"
   ]
 }

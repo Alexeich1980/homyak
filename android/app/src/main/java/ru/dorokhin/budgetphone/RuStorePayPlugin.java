@@ -67,7 +67,9 @@ public class RuStorePayPlugin extends Plugin {
 
     /** Схема deeplink возврата из банковских приложений (СБП/SberPay). ДОЛЖНА совпадать с
      *  meta-data sdk_pay_scheme_value и intent-filter MainActivity в AndroidManifest.xml. */
-    static final String PAY_SCHEME = "ru.dorokhin.homyak.rustore";
+    // <applicationId>.rustore: ru.dorokhin.homyak.rustore в сторе, ...homyak.test.rustore в тест-сборке
+    // (build.gradle payScheme - то же правило, манифест и SDK видят одну схему)
+    static String payScheme(android.content.Context c) { return c.getPackageName() + ".rustore"; }
 
     /** Клиент Pay SDK. null → id не задан (заглушка) → покупка недоступна.
      *  ВАЖНО: SDK сам инициализируется ContentProvider'ом на старте приложения по meta-data
@@ -88,7 +90,7 @@ public class RuStorePayPlugin extends Plugin {
         } catch (Throwable notCreated) {
             try {
                 HashMap<String, Object> cfg = new HashMap<String, Object>();
-                cfg.put("scheme", PAY_SCHEME);
+                cfg.put("scheme", payScheme(ctx));
                 return new RuStorePayClientProvider()
                     .provide(ctx.getApplicationContext(), new ConsoleApplicationId(appId), cfg);
             } catch (Throwable alreadyExist) {

@@ -206,8 +206,10 @@ test('оболочка: плагин RuStoreUpdate есть, зарегистр�
   assert.match(rd('android/build.gradle'), /nexus-external\.rustore\.ru/);
   const m = rd('android/app/src/main/AndroidManifest.xml');
   assert.match(m, /<queries>[\s\S]*<package android:name="ru\.vk\.store" \/>[\s\S]*<\/queries>/);
-  // новых разрешений приложение не просит
+  // разрешения манифеста: 1.0.4 добавила только напоминания о долгах (POST_NOTIFICATIONS,
+  // RECEIVE_BOOT_COMPLETED - tests/debts-shell.test.js); RuStore Update своих не добавляет
   const perms = [...m.matchAll(/<uses-permission android:name="([^"]+)"/g)].map((x) => x[1]).sort();
-  assert.deepEqual(perms, ['android.permission.INTERNET', 'android.permission.VIBRATE']);
+  assert.deepEqual(perms, ['android.permission.INTERNET', 'android.permission.POST_NOTIFICATIONS',
+    'android.permission.RECEIVE_BOOT_COMPLETED', 'android.permission.VIBRATE']);
   assert.match(rd('www/native.js'), /RuStoreUpdate: C\.registerPlugin\('RuStoreUpdate'\)/);
 });

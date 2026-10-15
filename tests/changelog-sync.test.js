@@ -13,7 +13,8 @@ const CHANGELOG = path.join(__dirname, '..', 'CHANGELOG.md');
 
 test('верхняя запись CHANGELOG соответствует текущей версии (линия 0.1.x)', () => {
   const txt = fs.readFileSync(CHANGELOG, 'utf8');
-  const head = txt.match(/^##\s+(.*)$/m);
+  // «## X (в работе)» - копилка следующей версии (номер ещё не поднят): её пропускаем
+  const head = txt.match(/^##\s+(?!.*\(в работе\)\s*$)(.*)$/m);
   assert.ok(head, 'в CHANGELOG нет ни одного раздела ##');
   const firstVer = head[1].trim();
   // линия RuStore-«Хомяка»: 0.1.x (до стора) и 1.x+ (стор); легаси 0.2-0.4.x сверху не бывает
@@ -39,10 +40,24 @@ test('topNotes отдаёт заметки текущего релиза, а н�
 test('topNotes = текст между первым и вторым заголовком «##» (пересчёт построчно)', () => {
   const lines = fs.readFileSync(CHANGELOG, 'utf8').replace(/\r\n/g, '\n').split('\n');
   const heads = [];
-  lines.forEach((l, i) => { if (l.slice(0, 3) === '## ') heads.push(i); });
+  lines.forEach((l, i) => { if (l.slice(0, 3) === '## ' && !/\(в работе\)\s*$/.test(l)) heads.push(i); });
   assert.ok(heads.length >= 2, 'в CHANGELOG меньше двух разделов «## » - сверять нарезку не на чем');
   const expected = lines.slice(heads[0] + 1, heads[1]).join('\n').trim();
   const got = L.topNotes(CHANGELOG).replace(/\r\n/g, '\n');
   assert.ok(expected.length > 0, 'верхний раздел пуст');
   assert.equal(got, expected);
+});
+
+// 1.0.4: раздел «(в работе)» стоит только над текущей версией и только со СЛЕДУЮЩИМ номером
+// (иначе пометку забыли снять на выпуске, и «что нового» показало бы старый раздел).
+test('CHANGELOG: раздел «(в работе)» - не выше одного и с номером новее package.json', () => {
+  const txt = fs.readFileSync(CHANGELOG, 'utf8');
+  const wip = txt.match(/^##\s+(\S+)\s+\(в работе\)\s*$/gm) || [];
+  assert.ok(wip.length <= 1, 'разделов «(в работе)» больше одного');
+  if (!wip.length) return;
+  const v = /^##\s+(\S+)/.exec(wip[0])[1];
+  const n = (x) => x.split('.').map(Number).reduce((a, b) => a * 1000 + b, 0);
+  assert.ok(n(v) > n(pkg.version), 'раздел «' + v + ' (в работе)» не новее версии ' + pkg.version + ' - снимите пометку');
+  assert.ok(txt.indexOf(wip[0]) < txt.search(/^##\s+(?!.*\(в работе\))/m), 'раздел «(в работе)» не сверху');
+  assert.equal(L.topNotes(CHANGELOG).indexOf('(в работе)'), -1);
 });

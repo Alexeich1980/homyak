@@ -128,14 +128,14 @@ test('замок: во время паузы попытки не считают�
   assert.equal(st.until, until, 'пауза не продлилась от нажатий во время неё');
 });
 
-test('замок: после фона запираем только если прошло >= 1 минуты и замок включён', () => {
-  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 59000 }), false, 'мелкое переключение');
-  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 60000 }), true, 'минута');
+test('замок: после фона запираем только если прошло >= 5 минут и замок включён', () => {
+  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 5 * 60000 - 1000 }), false, 'отвлёкся меньше чем на 5 минут');
+  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 5 * 60000 }), true, '5 минут');
   assert.equal(G.resumeLock({ on: false, bgAt: T0, now: T0 + 600000 }), false, 'замок выключен');
   assert.equal(G.resumeLock({ on: true, bgAt: 0, now: T0 }), false, 'в фон не уходили');
   assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 120000, away: true }), false,
     'своё системное окно (сохранение файла, оплата, отпечаток) - не уход хозяина');
-  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 600000, away: true }), true,
+  assert.equal(G.resumeLock({ on: true, bgAt: T0, now: T0 + 10 * 60000, away: true }), true,
     'из своего окна ушёл надолго (дольше AWAY_MAX) - запираем');
 });
 

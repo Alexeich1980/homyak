@@ -12,6 +12,12 @@ if (keystorePropsFile.exists()) {
 }
 def hasReleaseKey = keystorePropsFile.exists() && rootProject.file('../keys/' + (keystoreProps['storeFile'] ?: 'homyak.jks')).exists()
 
+// Тест-сборка (build-apk.js без --store/--release передаёт -PhomyakTest=true) - ОТДЕЛЬНОЕ
+// приложение ru.dorokhin.homyak.test «Хомяк тест»: ставится рядом с магазинной, RuStore её
+// не «обновляет» до магазинной (раньше обновлял - и тест потом не вставал поверх). Стор и
+// релиз - ru.dorokhin.homyak, как в RuStore. Схема возврата из оплаты - своя у каждой.
+def homyakTest = project.findProperty('homyakTest') == 'true'
+
 android {
     namespace "ru.dorokhin.budgetphone"
     compileSdk rootProject.ext.compileSdkVersion
@@ -19,8 +25,13 @@ android {
         applicationId "ru.dorokhin.homyak"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20007
-        versionName "1.0.3"
+        versionCode 20009
+        versionName "1.0.4"
+        if (homyakTest) applicationIdSuffix ".test"
+        manifestPlaceholders = [
+            appLabel : homyakTest ? 'Хомяк тест' : '@string/app_name',
+            payScheme: homyakTest ? 'ru.dorokhin.homyak.test.rustore' : 'ru.dorokhin.homyak.rustore'
+        ]
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         // Стор-сборка (build-apk.js --store передаёт -PhomyakStore=true): MainActivity на старте
         // забывает путь к скачанной веб-сборке - код меняется только через RuStore.

@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const Engine = require('../www/engine.js');
 
 // Кошельки с baseTs = 0: все операции «живые», ни одна не заморожена.
-// Категории в лентовых тестах не нужны (feedByDay/txDelta/walletsTotal их не читают),
+// Категории в лентовых тестах не нужны (feedByDay/walletsTotal их не читают),
 // операции строятся вручную через tx() с произвольными catId.
 function seeded() {
   const S = Engine.defaultState();
@@ -133,18 +133,6 @@ test('dayLabel: все дни недели и месяцы по-русски', (
   assert.equal(Engine.dayLabel('2026-12-31'), 'ЧТ, 31 декабря');
   assert.equal(Engine.dayLabel('2026-05-11'), 'ПН, 11 мая');
   assert.equal(Engine.dayLabel('мусор'), 'мусор');
-});
-
-test('txDelta: расход, доход и перевод двигают общий остаток по правилам walletBalance', () => {
-  const S = seeded();
-  const e = tx(S, { kind: 'exp', amount: 100, catId: 'e1', walletId: 'w1', date: '2026-09-02' }, 10);
-  const i = tx(S, { kind: 'inc', amount: 200, catId: 'i1', walletId: 'w1', date: '2026-09-02' }, 20);
-  const tr = tx(S, { kind: 'transfer', amount: 300, walletId: 'w1', toWalletId: 'w2', date: '2026-09-02' }, 30);
-  assert.equal(Engine.txDelta(S, e), -100);
-  assert.equal(Engine.txDelta(S, i), 200);
-  assert.equal(Engine.txDelta(S, tr), 0);
-  S.wallets[1].hidden = true;                       // перевод «в никуда»: деньги ушли из видимых
-  assert.equal(Engine.txDelta(S, tr), -300);
 });
 
 test('ui.analyticsView: по умолчанию выбор (null), чужое значение чинится', () => {

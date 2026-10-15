@@ -42,7 +42,8 @@ test('free-гейт дохода: 1 источник бесплатно, пол�
 
 test('предохранитель HARD 100/50/50 действует даже на полном доступе', () => {
   const E = require('../www/engine.js');
-  assert.deepStrictEqual(E.HARD, { wallets: 50, expCats: 100, incCats: 50 });
+  // 1.0.4: и долги - до 50 (в free один, Engine.FREE.debts)
+  assert.deepStrictEqual(E.HARD, { wallets: 50, expCats: 100, incCats: 50, debts: 50 });
   const S = E.defaultState();
   for (let i = 0; i < 100; i++) E.addCategory(S, 'exp', { name: 'E' + i });
   assert.strictEqual(E.canAddExpCat(S, true), false);   // полный доступ, но упор в предохранитель

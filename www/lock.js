@@ -1,6 +1,6 @@
 /* lock.js - «Защита входа»: замок от посторонних глаз (1.0.3).
 
-   Что делает: экран с кодом из 4 цифр при запуске и после фона дольше минуты; вход по
+   Что делает: экран с кодом из 4 цифр при запуске и после фона дольше 5 минут (Алексей 13.10: минута - маловато); вход по
    отпечатку, если хозяин его включил и телефон умеет. Данные замок НЕ шифрует - это
    честно сказано в окне настройки. Решения (формат кода, хэш, пауза после неверных
    попыток, запирать ли после фона) - чистые функции в guards.js, здесь только экран.
@@ -22,7 +22,7 @@
    release(): вызов кончился, а в фон так и не ушли (RuStore сразу ответил ошибкой) -
    отметку снимаем, иначе настоящий уход «Домой» в эти секунды простился бы без шторки.
    Метка одноразовая (только ближайший уход) и прощает только фон короче LOCK.AWAY_MAX
-   (5 мин): из окна сохранения ушли на «Домой» на час - замок запирает (ревью 1.0.3).
+   (10 мин): из окна сохранения ушли на «Домой» на час - замок запирает (ревью 1.0.3).
 
    Пока заперто, всё приложение под замком inert + aria-hidden: ни одна кнопка не
    получает фокус с клавиатуры и не читается экранным диктором. */
@@ -81,9 +81,11 @@ function bioVerify(subtitle) {
       negativeButtonText: 'Ввести код', maxAttempts: 3 });
   }).then(function (r) { release(); return r; }, function (e) { release(); throw e; });
 }
-// capacitor-native-biometric 4.2.2 (AuthActivity.convertToPluginErrorCode): 16 - хозяин сам
-// нажал «Ввести код» или отменил, 15 - окно закрыла система. Это не сбой отпечатка.
-function bioCancelled(e) { var c = e && e.code != null ? String(e.code) : ''; return c === '16' || c === '15'; }
+// capacitor-native-biometric 4.2.2 (AuthActivity): 16 - хозяин сам нажал «Ввести код» или
+// «Назад» (ERROR_NEGATIVE_BUTTON / ERROR_USER_CANCELED - плагин их не различает), 15 - окно
+// закрыла система (тайм-аут, ушли из приложения), 10 - окно закрылось само после maxAttempts
+// неудачных касаний (onAuthenticationFailed считает касания), 4/2 - датчик заблокирован.
+function bioCode(e) { return e && e.code != null ? String(e.code) : ''; }
 // миниатюра в «недавних» (Android 13+): прячем, пока замок включён
 function syncRecents() {
   var n = NP();
@@ -154,7 +156,10 @@ function showLock() {
   document.body.classList.add('locked');
   underLock(true);
   $('lockSheet').hidden = true;
-  $('lockTitle').textContent = 'Введите код';
+  // Вход по отпечатку (Алексей 14.10): под системным окном отпечатка - не клавиатура кода,
+  // а спокойный экран «Вход по отпечатку»; код - запасной путь кнопкой «Ввести код» или
+  // сам, если отпечаток не сработал.
+  bioFirst(bioOn());
   $('lockPad').innerHTML = padHtml(bioOn());
   paintDots($('lockDots'), 0);
   setMsg('');
@@ -164,12 +169,22 @@ function showLock() {
   if (bioOn()) bioAvailable().then(function (can) {
     if (!locked) return;
     if (can) { setTimeout(tryBio, 250); return; }
+    bioFirst(false);
     $('lockPad').innerHTML = padHtml(false);
     paintWait();
   });
 }
+// три неудачи отпечатка, потом код (Алексей 14.10). Три касания считает само системное окно
+// (maxAttempts: 3 в bioVerify) и закрывается с кодом 10 - тогда сразу код. Раньше поверх
+// этого был свой счётчик окон (3 окна × 3 касания = до 9 касаний, «осталось 2 попытки»
+// после трёх неудач) - ревью 14.10 №6.
+function bioFirst(on) {
+  $('lock').classList.toggle('bio-first', !!on);
+  $('lockTitle').textContent = on ? 'Вход по отпечатку' : 'Введите код';
+}
 function hideLock() {
   locked = false; covered = false; entry = '';
+  $('lock').classList.remove('bio-first');
   $('lock').hidden = true;
   $('lock').classList.remove('cover');
   $('lockSheet').hidden = true;
@@ -271,7 +286,15 @@ function tryBio() {
     if (locked) unlockOk();
     return true;
   }, function (e) {
-    setMsg(bioCancelled(e) ? '' : 'Не получилось по отпечатку - введите код');
+    var c = bioCode(e);
+    // окно закрыла система - остаёмся на экране отпечатка (кнопки «Войти по отпечатку» /
+    // «Ввести код»)
+    if (c === '15') { setMsg(''); return false; }
+    // «Ввести код» в системном окне - сразу код, а не снова экран отпечатка (ревью 14.10 №5)
+    if (c === '16') { bioFirst(false); setMsg(''); return false; }
+    // три неудачных касания (10), датчик заблокирован или сбой - код
+    bioFirst(false);
+    setMsg('Не получилось по отпечатку - введите код');
     return false;
   });
 }
@@ -318,6 +341,8 @@ $('lockPad').addEventListener('click', function (e) {
   if (b && !b.disabled) onKey(b.getAttribute('data-k'));
 });
 $('lockForgot').addEventListener('click', forgot);
+$('lockBioTry').addEventListener('click', function () { tryBio(); });
+$('lockToCode').addEventListener('click', function () { bioFirst(false); setMsg(''); });
 // с клавиатуры (эмулятор, внешняя клавиатура): цифры и Backspace
 document.addEventListener('keydown', function (e) {
   if (!locked) return;
@@ -414,8 +439,12 @@ function askPin(o) {
 
 // задать код (дважды). keepBio - оставить выбор отпечатка как был (смена кода).
 function setupPin(keepBio, bioChoice, done) {
+  // с отпечатком код - запасной вход, а не то, что вводят каждый раз (Алексей 14.10)
+  var bio = keepBio ? !!load().bio : !!bioChoice;
   askPin({
-    title: 'Придумайте код', text: 'Четыре цифры. Их нужно будет вводить при входе в приложение.',
+    title: 'Придумайте код',
+    text: bio ? 'Четыре цифры - запасной вход: если отпечаток не сработает или его выключат.'
+      : 'Четыре цифры. Их нужно будет вводить при входе в приложение.',
     onPin: function (first) {
       if (!G.validPin(first)) return 'Нужны четыре цифры';
       setTimeout(function () {
@@ -485,7 +514,7 @@ function warnNoBio(next) {
 function enableFlow() {
   UI.openDlg({
     title: 'Защита входа',
-    body: '<div class="lk-dlg-p">' + UI.esc('При входе в приложение и после перерыва дольше минуты нужно ввести код из 4 цифр.') + '</div>' +
+    body: '<div class="lk-dlg-p">' + UI.esc('При входе в приложение и после перерыва дольше 5 минут нужно подтвердить, что это вы: отпечатком или кодом из 4 цифр.') + '</div>' +
       '<div class="lk-dlg-p lk-dim">' + UI.esc('Это замок от посторонних глаз: данные на телефоне он не шифрует.') + '</div>',
     buttons: [
       { label: 'Отмена', cls: 'nav' },
@@ -608,6 +637,7 @@ window.AppLock = {
   onBackground: onBackground, onForeground: onForeground,
   // для self-test: перевести часы фона, включить с известным кодом
   _bgAt: function (ms) { bgAt = ms; },
+  _setupPin: setupPin,
   _awayAge: function (ms) { if (awayAt) awayAt = Date.now() - ms; },
   _backupWait: function (ms) { BACKUP_WAIT.ms = ms; },
   _enable: function (pin, bio) {
