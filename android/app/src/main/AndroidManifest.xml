@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- allowBackup=false: вся финансовая база живёт в localStorage приложения, и при
+         allowBackup=true она уезжала бы в автобэкап Google Drive без ведома хозяина.
+         Свой бэкап у «Хомяка» есть - «Бэкап в файл» в меню, файл остаётся у хозяина. -->
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="${appLabel}"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
+            android:name=".MainActivity"
+            android:label="${appLabel}"
+            android:theme="@style/AppTheme.NoActionBarLaunch"
+            android:launchMode="singleTask"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- RuStore Pay: возврат из банковского приложения (СБП/SberPay) после оплаты.
+                 Схема ДОЛЖНА совпадать с sdk_pay_scheme_value ниже и RuStorePayPlugin.payScheme():
+                 <applicationId>.rustore (build.gradle, payScheme). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${payScheme}" />
+            </intent-filter>
+
+        </activity>
+
+        <!-- RuStore Pay SDK: автоинициализация по идентификатору приложения из RuStore Консоли.
+             Имя мета-данных ДОЛЖНО быть console_app_id_value (его читает RuStorePayContentProvider,
+             подтверждено по AAR 11.1.0). Значение — в res/values/strings.xml (rustore_console_app_id),
+             заполняет Алексей. При заглушке инициализация уходит в асинхронный onErrorReturn SDK и
+             приложение не падает; покупка остаётся недоступной (гейт держится). -->
+        <meta-data
+            android:name="console_app_id_value"
+            android:value="@string/rustore_console_app_id" />
+
+        <!-- RuStore Pay: схема deeplink обязательна (без неё оплата через СБП/SberPay падает
+             ошибкой ApplicationSchemeWasNotProvided). ASCII, RFC-3986. -->
+        <meta-data
+            android:name="sdk_pay_scheme_value"
+            android:value="${payScheme}" />
+
+        <!-- 1.0.4: напоминания о платежах по долгам (ReminderPlugin/ReminderReceiver). Приёмник
+             ловит свой будильник и системные события, после которых будильник надо поставить
+             заново: перезагрузка, обновление приложения, смена времени и часового пояса.
+             Наружу не открыт: системные события Android доставляет и в закрытый приёмник. -->
+        <receiver
+            android:name=".ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths"></meta-data>
+        </provider>
+    </application>
+
+    <!-- Android 11+: без этого приложение не «видит» установленный RuStore (проверка обновления,
+         переход в карточку магазина - RuStoreUpdatePlugin.java, 1.0.3). Разрешением не является. -->
+    <queries>
+        <package android:name="ru.vk.store" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="rustore" />
+        </intent>
+    </queries>
+
+    <!-- Permissions -->
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <!-- 1.0.4: напоминания о платежах по долгам. POST_NOTIFICATIONS (Android 13+) спрашивается
+         только при включении «Напомнить о платеже» в карточке долга; RECEIVE_BOOT_COMPLETED -
+         поставить будильник напоминания заново после перезагрузки. Точные будильники
+         (SCHEDULE_EXACT_ALARM) не нужны: напоминание может прийти на несколько минут позже. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+</manifest>
