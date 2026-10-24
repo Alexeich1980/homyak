@@ -618,15 +618,8 @@ function creditForm(pfx, w) {
     if (st.remind && !remindBlocked() && !st.denied) { st.remind = false; paintRemind(); return Promise.resolve(false); }
     var p = plugin();
     if (!p) { st.remind = true; st.denied = false; paintRemind(); return Promise.resolve(true); }
-    return call(p, 'checkPermission').then(function (r) {
-      if (r && r.granted) return true;
-      var release = away();
-      return call(p, 'requestPermission').then(function (x) {
-        if (typeof release === 'function') release();
-        return !!(x && x.granted);
-      }, function () { if (typeof release === 'function') release(); return false; });
-    }, function () { return false; }).then(function (granted) {
-      setPerm(granted);
+    return askPerm().then(function (granted) {
+      granted = !!granted;
       st.denied = !granted;
       st.remind = !!granted;
       paintRemind();
@@ -878,7 +871,7 @@ function softDenied() {
   UI.save();
   UI.openDlg({
     title: 'Напоминания не придут',
-    body: '<div class="set-p">Уведомления «Хомяка» запрещены в настройках телефона, поэтому напоминания о платежах по долгам и кредитным картам не придут. ' +
+    body: '<div class="set-p">Уведомления «Хомяка» запрещены в настройках телефона, поэтому напоминания о платежах по долгам, кредитным картам и регулярным платежам не придут. ' +
       NOTIF_PATH + ' Напоминание приходит без сумм.</div>',
     buttons: [
       { label: 'Позже', cls: 'nav' },
@@ -914,6 +907,20 @@ function toggleRemind(id) {
     UI.toast('Напоминание включено');
     return Promise.resolve(true);
   }
+  return askPerm().then(function (granted) {
+    if (!granted) { deniedDlg(); return false; }
+    if (d.remind) { lastPlan = null; syncReminders(true); if (UI.renderCard) UI.renderCard(); }
+    else setRemind(id, true);
+    UI.toast(d.type === 'owed' ? 'Напомню за день до возврата и в сам день' : 'Напомню за день до платежа и в сам день');
+    return true;
+  });
+}
+// 1.0.6: разрешение на уведомления - ОДНА цепочка для долга, кредитки и регулярного платежа
+// (ревью кода 1.0.6: было три копии). Есть - true, Android 13+ спрашивает окном, отказ - false;
+// нет плагина (браузер) или сбой checkPermission - null: «не знаем» не записываем как запрет.
+function askPerm() {
+  var p = plugin();
+  if (!p) return Promise.resolve(null);
   return call(p, 'checkPermission').then(function (r) {
     if (r && r.granted) return true;
     var release = away();
@@ -921,14 +928,7 @@ function toggleRemind(id) {
       if (typeof release === 'function') release();
       return !!(x && x.granted);
     }, function () { if (typeof release === 'function') release(); return false; });
-  }, function () { return false; }).then(function (granted) {
-    setPerm(granted);
-    if (!granted) { deniedDlg(); return false; }
-    if (d.remind) { lastPlan = null; syncReminders(true); if (UI.renderCard) UI.renderCard(); }
-    else setRemind(id, true);
-    UI.toast(d.type === 'owed' ? 'Напомню за день до возврата и в сам день' : 'Напомню за день до платежа и в сам день');
-    return true;
-  });
+  }, function () { return null; }).then(function (granted) { if (granted !== null) setPerm(granted); return granted; });
 }
 function deniedDlg() {
   UI.openDlg({
@@ -994,6 +994,8 @@ function termPaid(d, due) {
 var tapWait = null;
 function openFromReminder(id, due) {
   var d = Engine.findDebt(S(), id);
+  // 1.0.6: в том же поле интента - id категории с регулярным платежом (regular.js fromTap)
+  if (!d && window.Regular && Engine.regularOf(S(), id)) return window.Regular.fromTap(id, due);
   if (!d) return openCardFromReminder(id);
   if (d.archived) return false;
   if (locked()) {   // «Защита входа»: сначала замок, после разблокировки - сразу окно платежа
@@ -1069,6 +1071,7 @@ UI.debtsListHtml = debtsListHtml;
 UI.bindDebtsList = bindDebtsList;
 UI.debtsChanged = changed;
 UI.creditForm = creditForm;
+UI.dayGridHtml = dayGridHtml;   // 1.0.6: та же сетка дня в окне регулярного платежа
 window.Debts = {
   addToStrip: addToStrip, addDebt: addDebt, editDebt: editDebt, pickType: pickType, baseDlg: baseDlg,
   archive: archive, restore: restoreDebt, payFlow: payFlow, deleteFlow: deleteDebtFlow, offerArchive: offerArchive,
@@ -1078,6 +1081,7 @@ window.Debts = {
   softDenied: softDenied, perm: function () { return perm; },
   openFromReminder: openFromReminder, checkTap: checkTap,
   creditForm: creditForm, topUpCard: topUpCard,
+  askPerm: askPerm, remindBlocked: remindBlocked, openSettings: openSettings, locked: locked, busy: busy,
   _plugin: function (p) { pluginOverride = p || null; lastPlan = null; perm = null; }
 };
 

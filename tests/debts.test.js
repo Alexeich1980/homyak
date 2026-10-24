@@ -386,7 +386,11 @@ test('долги: перенос плиток - кошелёк ↔ долг; л�
   const days = Engine.feedByDay(S, '2026-02');
   assert.strictEqual(days[0].balanceEnd, Engine.walletsTotal(S));
   assert.strictEqual(days[1].balanceEnd, Engine.walletsTotal(S) - 1000, 'взятие в долг двигает «В кошельках»');
-  assert.strictEqual(days[1].change, 0, 'платёж по долгу (и его проценты) - не расход дня');
+  // 24.10 (Алексей): «изменение» дня - как сдвинулись деньги в кошельках, с операциями долга (раньше
+  // платёж по долгу в него не входил, и оно не сходилось с «остатком на конец дня»). В «Потрачено» платёж
+  // по-прежнему не идёт - это не расход (решение 13.10).
+  assert.strictEqual(days[1].change, -30000, 'платёж по долгу не вошёл в изменение дня');
+  assert.strictEqual(days[0].change, 1000, '«взял в долг» не вошло в изменение дня');
   assert.strictEqual(Engine.walletsTotalAt(S, '2026-02-14'), 205000);
 });
 

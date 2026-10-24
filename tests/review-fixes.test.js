@@ -216,10 +216,11 @@ test('edit.js: без Access.PAY баннер не рисует «Купить»
   const pw = s.slice(s.indexOf('function paywall'), s.indexOf('function capMsg'));
   assert.ok(pw.indexOf('Access.PAY') >= 0 || s.indexOf('Access.PAY') >= 0, 'paywall не смотрит на Access.PAY');
   assert.ok(pw.indexOf('Оплата подключится в ближайшем обновлении') >= 0, 'нет честной строки без оплаты');
-  assert.ok(pw.indexOf('buyFullAccess(ret)') >= 0, '«Купить» не передаёт колбэк возврата');
+  // 1.0.6 (ревью P10): и строку причины why - «Попробовать снова» вернёт тот же пейволл
+  assert.ok(pw.indexOf('buyFullAccess(ret, why)') >= 0, '«Купить» не передаёт колбэк возврата');
   assert.ok(/if \(pay\) buttons\.push\(\{ label: 'Купить/.test(pw), 'кнопка «Купить» не под условием оплаты');
   assert.equal(pw.indexOf('респект'), -1, 'старая строка про респект осталась');
-  assert.ok(pw.indexOf('лента событий') >= 0);
+  assert.ok(pw.indexOf('лента, тепловая карта') >= 0);
   assert.equal(pw.indexOf('—'), -1, 'в тексте баннера длинное тире');
 });
 

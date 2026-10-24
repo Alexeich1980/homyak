@@ -810,6 +810,8 @@
     S.tx = S.tx.filter(function (t) { return t.imp !== batchId; });
     var removedTx = before - S.tx.length, used = {};
     S.tx.forEach(function (t) { if (t.catId) used[t.catId] = 1; if (t.walletId) used[t.walletId] = 1; if (t.toWalletId) used[t.toWalletId] = 1; });
+    // 1.0.6 (ревью кода): на категорию или кошелёк уже настроен регулярный платёж - они нужны, не удаляем
+    (S.categories.exp || []).forEach(function (c) { if (c.regular) { used[c.id] = 1; if (c.regular.walletId) used[c.regular.walletId] = 1; } });
     var rc = 0, rw = 0;
     b.cats.forEach(function (cid) {
       if (used[cid]) return;

@@ -918,14 +918,9 @@ function updateDots(box, dots) {
   each(dots.children, function (d, j) { d.classList.toggle('on', j === i); });
 }
 
-// Номер версии в приложении один и приезжает из package.json через version.js.
-// В шапке меню показываем коротко: «0.2.0» → «v0.2» (хвостовой ноль патча не читается),
-// в «О приложении» — как есть, полностью.
+// Номер версии в приложении один и приезжает из package.json через version.js:
+// в плитке «Обновление» и полностью в «О приложении» (в шапке меню версии нет, 22.10).
 function appVersion() { return String(window.APP_VERSION || '0'); }
-function shortVersion() { return appVersion().replace(/\.0$/, ''); }
-// В шапке меню — только major.minor: «0.4.1» → «0.4». Номер сборки и оболочки
-// в шапку не выносим, полную версию видно в «Обновление» и «О приложении».
-function menuVersion() { return appVersion().split('.').slice(0, 2).join('.'); }
 // Версия ОБОЛОЧКИ (APK) — её ставит native.js из App.getInfo(). Бесшовное обновление
 // подменяет только www, поэтому номера расходятся: показываем оболочку, лишь когда
 // она отстала, чтобы в обычной жизни строка не пестрила.
@@ -935,11 +930,9 @@ function verSuffix() { var s = shellVersion(); return s === appVersion() ? '' : 
 // Меню рисуется целиком отсюда: и карточка хомяка-помощника, и подписи плиток.
 // sync.js больше не пишет в подписи сам — иначе одно и то же считалось бы дважды.
 function renderMenu() {
-  var mv = $('menuVer');
-  mv.textContent = 'v' + menuVersion();   // только major.minor, без оболочки/сборки
-  mv.classList.remove('two');
+  // 22.10 (Алексей): версии в шапке меню нет - она в плитке «Обновление» и в «О приложении»
 
-  // Чип статуса рядом с версией: Pro (золото/ценность) при полном доступе, иначе Free
+  // Чип статуса рядом с названием: Pro (золото/ценность) при полном доступе, иначе Free
   // (приглушённый, не красный - это не ошибка). Free тапабельный - мягкий апселл.
   var tier = $('menuTier');
   if (tier) {
@@ -1086,7 +1079,8 @@ function openDlg(o) {
   homeDlgHint();
   // Свайп-вниз по шапке закрывает только те окна, что сами себя пометят (список
   // кошельков). Каждое новое окно стартует без метки — прошлая на нём не остаётся.
-  $('dlg').classList.remove('dlg-swipe');
+  // 1.0.6: и плотная вёрстка «О приложении» (dlg-about) не переезжает на следующие окна
+  $('dlg').classList.remove('dlg-swipe', 'dlg-about', 'dlg-howto');
   // o.stickyBtns: кнопки закреплены внизу окна, содержимое прокручивается над ними
   // (предпросмотр импорта: «Загрузить» видно без прокрутки на любом экране)
   $('dlg').classList.toggle('dlg-sticky', !!o.stickyBtns);
@@ -2380,23 +2374,29 @@ function amSave() {
   if (!(v > 0)) return;
   if (v > AM_TOP) { dlgAlert(AM_TOP_MSG, 'Не сохранилось'); return; }
   if (amOp.kind === 'debtpay' || amOp.kind === 'debttake') return amSaveDebt(v);
-  var op = amOp, tx;
   amDate = clampDate(amDate);              // последний заслон: вперёд датировать нельзя
-  var mo = Engine.ym(amDate);
+  recordTx(amOp, v, amDate, amNote, true);
+}
+
+// Запись дохода/расхода/перевода - один путь для экрана суммы и окна «Записать платёж?»
+// регулярного платежа (1.0.6, regular.js): звук и подсветка по уровню лимита, полёт монетки,
+// тост «Отменить», окно оценки. fromAmount - закрыть экран суммы. null - не записалось (окно с причиной).
+function recordTx(op, v, date, note, fromAmount) {
+  var tx, mo = Engine.ym(date);
   var before = txLevel(op.kind, op.catId, mo);   // 1.0.5: подсветка - переход через лимит
   try {
     tx = Engine.addTx(S, {
-      kind: op.kind, amount: v, date: amDate,
-      catId: op.catId, walletId: op.walletId, toWalletId: op.toWalletId, note: amNote
+      kind: op.kind, amount: v, date: date,
+      catId: op.catId, walletId: op.walletId, toWalletId: op.toWalletId, note: note
     });
   } catch (e) {
     var m = e && e.message;
     dlgAlert(m === 'amount-max' ? AM_TOP_MSG
       : (m === 'date-future' || m === 'date') ? FUTURE_MSG + '.'
       : 'Сумма должна быть больше нуля.', 'Не сохранилось');
-    return;
+    return null;
   }
-  save(); closeAmount(); render(); amCardRefresh(); haptic('medium');
+  save(); if (fromAmount) closeAmount(); render(); amCardRefresh(); haptic('medium');
   soundTx(op.kind, op.catId, mo, before);
   if (window.UI.animateTx) {
     var els = amEndEls(op);
@@ -2408,6 +2408,7 @@ function amSave() {
   });
   // окно оценки RuStore: один раз, сразу после удачной записи (решение - guards.js)
   if (window.Nudges && window.Nudges.afterTx) { try { window.Nudges.afterTx(); } catch (e) {} }
+  return tx;
 }
 
 $('amCancel').addEventListener('click', closeAmount);
@@ -2796,7 +2797,32 @@ var PRIVACY_URL = 'https://www.dorokhin-finance.ru/homyak/privacy.html';
 var TERMS_URL = 'https://www.dorokhin-finance.ru/homyak/terms.html';
 var SITE = 'https://www.dorokhin-finance.ru/';
 
-$('mAbout').addEventListener('click', function () {
+// 1.0.6: инструкция «Как пользоваться» в «О приложении» - [тема, текст]. Тексты согласованы
+// Алексеем 22.10 (docs/help-106-approved.md). Новая функция = новая тема (тест help-106).
+var HELP_TOPICS = [
+  ['Запись операций', 'Перетащите плитку на плитку: кошелёк на категорию - расход, источник дохода на кошелёк - доход, кошелёк на кошелёк - перевод, кошелёк на долг - платёж по долгу, долг на кошелёк - взяли в долг или вам вернули. Или нажмите «+» внизу справа: выберите вид операции, укажите, откуда и куда, и введите сумму. Сумму можно посчитать прямо на экране: 150+300. Дату можно сменить кнопками внизу. Ошиблись - нажмите «Отменить» в строке сверху сразу после записи или откройте операцию в ленте и поправьте.'],
+  ['Кошельки, категории и лимиты', 'Меню → «Настроить кошельки» и «Настроить категории»: добавить, переименовать, сменить иконку, убрать в архив. Долгое нажатие на плитку - правка и перестановка плиток. Лимит в месяц задаётся в карточке категории. Кольцо вокруг иконки наполняется по мере трат: зелёное - в норме, оранжевое - близко к лимиту, красное - лимит превышен, серое - лимита нет. В новый месяц лимиты переходят сами.'],
+  ['Заметки', 'На экране указания суммы есть кнопка «Заметка»: за что заплатили или от кого пришли деньги, до 100 знаков. Заметка видна в ленте и в карточках, поправить её можно в правке операции.'],
+  ['Подсветка и звук', 'На каждой трате сверх лимита экран вспыхивает красным, на доходе - зелёным. Подсветку, звук, вибрацию и подсказки можно включить или выключить в меню → «Звук и подсказки».'],
+  ['Долги и кредитные карты', 'Долг заводят через «+» в списке кошельков: «Долг: я должен» или «Долг: мне должны». Платёж - перетащите кошелёк на плитку долга. Если указать ставку, «Хомяк» сам отделит проценты. Напоминания о платеже включаются в карточке долга. Кредитная карта - это кошелёк: в его настройке отметьте «Кредитная карта» и день платежа.'],
+  ['Регулярные платежи', 'Аренда, подписки, связь и пр.: в карточке категории нажмите строку «Регулярный платёж» и укажите сумму, кошелёк и день оплаты. В этот день в\u00a020:00 «Хомяк» предложит записать платёж одним касанием, если до этого оплаты не было.'],
+  ['Аналитика', 'Кнопка справа сверху: сводка месяца, лента событий, тепловая карта, зона внимания и динамика по месяцам. Когда есть долги, появляется «Капитал и обязательства».'],
+  ['Копия данных и Excel', 'Данные хранятся только на вашем устройстве. Меню → «Копия данных» → «Сохранить копию в файл». Файл можно переслать на другой телефон для восстановления: «Восстановить из файла». Раз в месяц «Хомяк» напомнит сделать копию. «Таблица Excel» (полная версия): выгрузка операций и загрузка из таблиц других приложений.'],
+  ['Защита входа', 'Меню → «Защита входа»: пин-код и вход по биометрии. Приложение запирается, если пробыло в фоне дольше 5 минут.'],
+  ['Полный доступ', 'Бесплатно: 2 кошелька, 8 категорий расходов, 1 источник дохода, 1 долг и 1 регулярный платёж. Полный доступ - разовая покупка в RuStore, без подписки. Сменили телефон - войдите в RuStore под тем же аккаунтом и нажмите «Восстановить покупку» в окне «Полный доступ».'],
+  ['Обновления', 'Меню → «Обновление» → «Проверить». Новую версию ставит RuStore.']
+];
+// открыта одна тема за раз (toggle не всплывает - ловим на погружении)
+document.addEventListener('toggle', function (e) {
+  var d = e.target;
+  if (!d || !d.classList || !d.classList.contains('ab-qa') || !d.open) return;
+  var all = document.querySelectorAll('#dlgBody .ab-qa[open]');
+  for (var i = 0; i < all.length; i++) if (all[i] !== d) all[i].open = false;
+  try { d.scrollIntoView({ block: 'nearest' }); } catch (x) {}
+}, true);
+
+$('mAbout').addEventListener('click', function () { openAbout(); });
+function openAbout() {
   closeMenu();
   openDlg({
     title: 'О приложении',
@@ -2804,22 +2830,13 @@ $('mAbout').addEventListener('click', function () {
       '<div class="about">' +
         '<div class="ab-head">' +
           '<span class="ab-ham" aria-hidden="true"><img src="hamster.png" alt=""></span>' +
-          '<div class="ab-ttl"><b>Хомяк</b> · v' + esc(menuVersion()) + '</div>' +
+          '<div class="ab-ttl"><b>Хомяк</b> · v' + esc(appVersion()) + '</div>' +
         '</div>' +
         '<p class="ab-lead">Учёт личных финансов без облака и <b>без рекламы</b>. Кошельки, категории, лимиты и долги живут только на вашем телефоне.</p>' +
 
-        '<div class="ab-h">Как записывать операции</div>' +
-        '<p class="ab-p">Перетаскивайте плитки: нажмите на плитку и, не отпуская, ведите пальцем на нужную.</p>' +
-        '<ul class="ab-list">' +
-          '<li>кошелёк на категорию расхода - расход</li>' +
-          '<li>источник дохода на кошелёк - доход</li>' +
-          '<li>кошелёк на кошелёк - перевод</li>' +
-          '<li>кошелёк на долг - платёж по долгу</li>' +
-          '<li>долг на кошелёк - взяли в долг или вам вернули</li>' +
-        '</ul>' +
-
-        '<div class="ab-h">Жесты и настройки</div>' +
-        '<p class="ab-p">Короткий тап по плитке открывает её операции, долгий - правку и порядок. Кошельки, категории и лимиты - в меню (хомяк сверху слева), долги - «+» в ленте кошельков, аналитика - справа.</p>' +
+        // 1.0.6: инструкция - отдельное окно с темами-раскрывашками (11 тем в «О приложении»
+        // не влезали в 360x640 без прокрутки). Текст согласован Алексеем 22.10.
+        '<button type="button" class="btn ghost w100 ab-howto" id="abHowto">Как пользоваться</button>' +
 
         '<div class="ab-h">Документы <span class="ab-ext" data-k="extNote">· ссылки ↗ откроются в браузере</span></div>' +
         '<p class="ab-linkrow"><a class="ab-link" data-ext="' + PRIVACY_URL + '" href="' + PRIVACY_URL + '">Политика конфиденциальности ↗</a></p>' +
@@ -2842,9 +2859,24 @@ $('mAbout').addEventListener('click', function () {
       Array.prototype.forEach.call($('dlgBody').querySelectorAll('.ab-link[data-ext]'), function (a) {
         a.addEventListener('click', function (e) { e.preventDefault(); openExternal(a.getAttribute('data-ext')); });
       });
+      var how = $('abHowto');
+      if (how) how.addEventListener('click', openHelp);
     }
   });
-});
+}
+// 1.0.6: «Как пользоваться» - темы-раскрывашки со стрелкой, открыта одна за раз.
+// Закрытие любым способом (кнопка, фон, свайп) - назад в «О приложении».
+function openHelp() {
+  openDlg({
+    title: 'Как пользоваться',
+    body: '<div class="ab-help">' + HELP_TOPICS.map(function (t, i) {
+      return '<details class="ab-qa" data-tp="' + i + '"><summary>' + esc(t[0]) + '</summary><p class="ab-p">' + esc(t[1]) + '</p></details>';
+    }).join('') + '</div>',
+    buttons: [{ label: 'Назад', cls: 'nav' }],
+    onClose: openAbout,
+    onOpen: function () { $('dlg').classList.add('dlg-howto', 'dlg-swipe'); }
+  });
+}
 
 $('fieldExp').querySelector('.pages').addEventListener('scroll', function () {
   updateDots(this, $('expDots'));
@@ -3015,9 +3047,10 @@ window.UI = {
   openDlg: openDlg, dlgConfirm: dlgConfirm, dlgAlert: dlgAlert, dlgPrompt: dlgPrompt,
   closeDlg: closeDlg, dlgOpen: dlgOpen, bindBackdropClose: bindBackdropClose, bindSwipeClose: bindSwipeClose,
   overlayFlags: overlayFlags, topOverlay: topOverlay, closeTop: closeTop,
+  dragging: function () { return !!drag; },   // 1.0.6: окно регулярного платежа не открывать посреди перетаскивания
   toast: toast, hideToast: hideToast, haptic: haptic, sound: sound, soundTx: soundTx, txLevel: txLevel,
   openMenu: openMenu, closeMenu: closeMenu, openPrefs: openPrefs, openCopy: openCopy, openTable: openTable, makeGhost: makeGhost,
-  openAmount: openAmount, closeAmount: closeAmount, noteHtml: noteHtml, noteMaxFor: noteMaxFor, NOTE_PH: NOTE_PH,
+  openAmount: openAmount, closeAmount: closeAmount, recordTx: recordTx, noteHtml: noteHtml, noteMaxFor: noteMaxFor, NOTE_PH: NOTE_PH,
   amNote: function () { return amNote; }, amFitPath: amFitPath, amountOpen: amountOpen, resolveDrop: resolveDrop, evalExpr: evalExpr, SNAP_MS: SNAP_MS,
   tileHtml: tileHtml, walletHtml: walletHtml, walletTileHtml: walletTileHtml, applyFill: applyFill, levelOf: levelOf, wcolor: wcolor,
   monthLabel: monthLabel, money: money, moneyInput: moneyInput, calcInput: calcInput,
@@ -3026,8 +3059,8 @@ window.UI = {
   debtName: debtName, debtOpLabel: debtOpLabel, debtTileHtml: debtTileHtml, DEBT_GLYPH: DEBT_GLYPH, debtMark: debtMark, rateText: rateText, rateNum: rateNum,
   screenDay: function () { return screenDay; },
   loadFrom: loadFrom, saveBanner: saveBanner,
-  openExternal: openExternal, appVersion: appVersion, shortVersion: shortVersion,
-  menuVersion: menuVersion, shellVersion: shellVersion, verSuffix: verSuffix,
+  openExternal: openExternal, appVersion: appVersion,
+  shellVersion: shellVersion, verSuffix: verSuffix,
   hintsOn: hintsOn, hintShouldShow: hintShouldShow, dismissHint: dismissHint,
   bindHintSwipe: bindHintSwipe, updateMainHint: updateMainHint, mainHintKey: mainHintKey,
   fitSums: fitSums, hasFull: hasFull, onboardOpen: onboardOpen,

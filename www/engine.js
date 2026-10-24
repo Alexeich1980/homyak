@@ -497,8 +497,8 @@
   }
 
   // Категории и лимиты приводим к строгой форме. Никогда не бросают — прошли через migrate.
-  function normOneCat(c, i) {
-    return {
+  function normOneCat(c, i, kind) {
+    var o = {
       id: (c && typeof c.id === 'string' && c.id) ? c.id : ('c' + i + Math.random().toString(36).slice(2, 6)),
       name: strOr(c && c.name, 'Категория'),
       icon: (c && typeof c.icon === 'string' && c.icon) ? c.icon : 'dot',
@@ -506,11 +506,40 @@
       order: isNum(c && c.order) ? c.order : i,
       archived: !!(c && c.archived)
     };
+    // 1.0.6: регулярный платёж - только у категории расхода
+    var r = kind === 'exp' ? normRegular(c && c.regular) : null;
+    if (r) o.regular = r;
+    return o;
   }
-  function normCatList(v) { return Array.isArray(v) ? v.filter(isObj).map(normOneCat) : []; }
+  function normCatList(v, kind) {
+    return Array.isArray(v) ? v.filter(isObj).map(function (c, i) { return normOneCat(c, i, kind); }) : [];
+  }
   function normCategories(c) {
     if (!isObj(c)) return { exp: [], inc: [] };
-    return { exp: normCatList(c.exp), inc: normCatList(c.inc) };
+    return { exp: normCatList(c.exp, 'exp'), inc: normCatList(c.inc, 'inc') };
+  }
+  // 1.0.6 регулярный платёж категории расхода (аренда, подписки): {on, amount, day, walletId, snooze}.
+  //   on        включён (выключение настройки не стирает - включить снова одним касанием)
+  //   amount    сумма платежа, больше нуля
+  //   day       день оплаты 1-31 (29-31 в коротком месяце - последний день, как dueDate у долгов)
+  //   walletId  кошелёк, с которого платят (удалён или скрыт - напоминаний нет, строка просит выбрать)
+  //   snooze    «Ещё нет»: дата следующего напоминания (ГГГГ-ММ-ДД) или null
+  //   skipYm    месяц (ГГГГ-ММ), в котором не напоминаем: включили или поправили настройку, когда
+  //             20:00 дня оплаты этого месяца уже прошло (ревью «сломать» Н2) - первый раз в следующем
+  // Без суммы или дня настройка бессмысленна - убираем целиком; мусор в полях - вон.
+  // Сумма, которая до копеек округляется в ноль (0.001 из копии), - тоже вон (Н13).
+  function normRegular(r) {
+    if (!isObj(r)) return null;
+    var day = isNum(r.day) ? Math.floor(r.day) : NaN;
+    if (!(isNum(r.amount) && r2(r.amount) > 0) || !(day >= 1 && day <= 31)) return null;
+    return {
+      on: r.on === true,
+      amount: Math.min(MAX_AMOUNT, r2(r.amount)),
+      day: day,
+      walletId: (typeof r.walletId === 'string' && r.walletId) ? r.walletId : null,
+      snooze: isDate(r.snooze) ? r.snooze : null,
+      skipYm: (typeof r.skipYm === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(r.skipYm)) ? r.skipYm : null
+    };
   }
   function normCarried(c) {
     var out = {};
@@ -917,8 +946,8 @@
   // S.limits[ym] (ключ - id категории), поэтому копирование фильтруется по виду:
   //   без kind    - прежнее поведение: весь месяц целиком (заменяя цель в целевом месяце);
   //   kind задан  - только цели категорий этого вида, ПОВЕРХ существующих (не затирая
-  //                 цели другого вида). Иначе «Скопировать планы» на вкладке доходов
-  //                 снесло бы лимиты расходов текущего месяца. Возвращает число перенесённых.
+  //                 цели другого вида). Возвращает число перенесённых. Кнопку «Скопировать
+  //                 лимиты/планы» убрали 23.10: лимиты переезжают сами (carryLimits).
   function copyLimits(S, fromYM, toYM, kind) {
     var src = S.limits[fromYM]; if (!src) return 0;
     if (!kind) {
@@ -987,6 +1016,7 @@
   // ДАЖЕ на полном доступе (защита от лавины/случайности и от торможения экрана на сотнях
   // плиток). Живой человек до HARD не доходит — «без ограничений» остаётся честным.
   var FREE = { wallets: 2, expCats: 8, incCats: 1, debts: 1 };
+  FREE.regular = 1;   // 1.0.6: регулярных платежей в бесплатной версии
   var HARD = { wallets: 50, expCats: 100, incCats: 50, debts: 50 };
   function walletsActiveCount(S) { return S.wallets.filter(function (w) { return !w.hidden; }).length; }
   function expCatsActiveCount(S) { return S.categories.exp.filter(function (c) { return !c.archived; }).length; }
@@ -1219,8 +1249,8 @@
   }
 
   // Лента месяца, сгруппированная по дням: новые дни сверху, внутри дня — новые
-  // операции сверху (по ts). change — чистое изменение дня (доход минус расход,
-  // перевод ноль), balanceEnd — сколько было в кошельках на КОНЕЦ этого дня:
+  // операции сверху (по ts). change — чистое изменение дня (доход минус расход, плюс/минус
+  // операции долга, перевод ноль), balanceEnd — сколько было в кошельках на КОНЕЦ этого дня:
   // сегодняшний остаток минус всё, что случилось позже. Чистая функция, её же гоняют
   // тесты; экран только печатает то, что она посчитала.
   function feedByDay(S, ymStr) {
@@ -1243,6 +1273,9 @@
       rows.forEach(function (t) {
         if (t.kind === 'inc') change += t.amount;
         else if (t.kind === 'exp') change -= t.amount;
+        // платёж по долгу уводит деньги из кошелька, «взял в долг / вернули» - приносит (как txEffects):
+        // без этого «изменение» дня с платежом по кредиту не сходилось с остатком на конец дня (24.10)
+        else if (t.kind === 'debt') change += t.op === 'take' ? t.amount : -t.amount;
       });
       return { date: d, label: dayLabel(d), rows: rows,
         change: Math.round(change * 100) / 100,
@@ -1305,6 +1338,122 @@
     return !!full || debtsActiveCount(S) < FREE.debts;
   }
   function hasOweDebts(S) { return debtsActive(S).some(function (d) { return d.type === 'owe'; }); }
+
+  // ---------- 1.0.6: регулярные платежи (аренда, подписки) ----------
+  // Настройка живёт в категории расхода (cat.regular, поля - normRegular). Вечером в день оплаты
+  // (REGULAR_HOUR, решение Алексея 22.10: днём человек может нажать «записать», не заплатив, и
+  // попасть на просрочку) - уведомление и окно в приложении «Записать платёж?». «Ещё нет» -
+  // завтра в то же время, и так до записи платежа или конца месяца.
+  var REGULAR_HOUR = 20;
+  var REGULAR_PAID_SHARE = 0.9;   // оплачен: один расход в категории за месяц не меньше 90% суммы
+  function expCat(S, id) {
+    var f = findCategory(S, id);
+    return f && f.kind === 'exp' ? f.cat : null;
+  }
+  function regularOf(S, catId) { var c = expCat(S, catId); return c && c.regular ? c.regular : null; }
+  // работает ли сейчас: включён, категория не в архиве, кошелёк есть и не скрыт
+  function regularLive(S, c) {
+    var r = c && c.regular;
+    if (!r || !r.on || c.archived || !r.walletId) return false;
+    var w = findWallet(S, r.walletId);
+    return !!w && !w.hidden;
+  }
+  // включённые (созданное в бесплатной версии не блокируется - считаем все, что не в архиве)
+  function regularActiveCount(S, exceptId) {
+    return S.categories.exp.filter(function (c) { return c.id !== exceptId && !c.archived && c.regular && c.regular.on; }).length;
+  }
+  // можно ли включить платёж у этой категории: уже включённый - всегда; иначе free - один
+  function canAddRegular(S, full, catId) {
+    var r = regularOf(S, catId);
+    if (r && r.on) return true;
+    return !!full || regularActiveCount(S, catId) < FREE.regular;
+  }
+  // Н2 ревью «сломать»: включили или поправили настройку, когда 20:00 дня оплаты этого месяца уже
+  // прошло, - этот месяц для напоминаний закрыт (иначе сразу «просрочка» и окно каждый вечер),
+  // первый раз напомним в следующем. День оплаты сегодня и ещё нет 20:00 - напомним сегодня.
+  function regularSkipYm(day, nowTs) {
+    var now = isNum(nowTs) ? nowTs : Date.now(), cur = localDay(now).slice(0, 7);
+    return atHour(dueDate(cur, day), REGULAR_HOUR) <= now ? cur : null;
+  }
+  // o: {amount, day, walletId}. Включает и сбрасывает «Ещё нет». Бросает 'cat', 'amount', 'day', 'wallet'.
+  // nowTs - момент правки (по умолчанию сейчас): от него закрытый месяц (skipYm)
+  function setRegular(S, catId, o, nowTs) {
+    var c = expCat(S, catId);
+    if (!c || c.archived) throw new Error('cat');
+    var a = Number(o && o.amount);
+    if (!isNum(a) || r2(a) <= 0 || a > MAX_AMOUNT) throw new Error('amount');
+    var day = Number(o.day);
+    if (!(day >= 1 && day <= 31 && Math.floor(day) === day)) throw new Error('day');
+    var w = typeof o.walletId === 'string' ? findWallet(S, o.walletId) : null;
+    if (!w || w.hidden) throw new Error('wallet');
+    c.regular = { on: true, amount: r2(a), day: day, walletId: w.id, snooze: null, skipYm: regularSkipYm(day, nowTs) };
+    return c.regular;
+  }
+  // выключить/включить, не стирая настройку; null - настройки нет. Включение - как правка (skipYm).
+  function setRegularOn(S, catId, on, nowTs) {
+    var r = regularOf(S, catId);
+    if (!r) return null;
+    r.on = !!on;
+    r.snooze = null;
+    r.skipYm = on ? regularSkipYm(r.day, nowTs) : null;
+    return r;
+  }
+  // Ревью кода 1.0.6: возврат категории из архива / показ кошелька оживляет платёж - как включение
+  // (Н2): день оплаты этого месяца уже прошёл - месяц закрыт, иначе сразу шло окно «просрочки»
+  function reviveRegular(S, catId, nowTs) {
+    var r = regularOf(S, catId);
+    if (!r || !r.on) return null;
+    r.snooze = null;
+    r.skipYm = regularSkipYm(r.day, nowTs);
+    return r;
+  }
+  // Н5: категории, чьи работающие регулярные платежи завязаны на кошелёк (скрыть/удалить - напоминания прекратятся)
+  function regularOnWallet(S, walletId) {
+    return S.categories.exp.filter(function (c) { return regularLive(S, c) && c.regular.walletId === walletId; })
+      .map(function (c) { return c.name; });
+  }
+  // оплачен ли платёж месяца ymStr: в категории есть ОДИН расход не меньше 90% суммы (любая дата
+  // месяца: до дня оплаты - досрочно, после - уже записан). Части меньше 90% не складываем.
+  function regularPaid(S, catId, ymStr) {
+    var r = regularOf(S, catId);
+    if (!r) return false;
+    var min = r2(r.amount * REGULAR_PAID_SHARE);
+    return S.tx.some(function (t) {
+      return t.kind === 'exp' && t.catId === catId && ym(t.date) === ymStr && t.amount >= min - 0.004;
+    });
+  }
+  // день напоминания в месяце ymStr: день оплаты, а после «Ещё нет» - отложенный день этого
+  // месяца; отложено за конец месяца - в этом месяце больше не напоминаем (null)
+  function regularDay(r, ymStr) {
+    if (r.skipYm === ymStr) return null;   // включили после дня оплаты - этот месяц закрыт (Н2)
+    var due = dueDate(ymStr, r.day), s = r.snooze;
+    if (s && s.slice(0, 7) === ymStr && s > due) return s;
+    if (s === addMonths(ymStr, 1) + '-01') return null;   // «Ещё нет» в последний день месяца
+    return due;
+  }
+  function atHour(day, h) { return new Date(+day.slice(0, 4), +day.slice(5, 7) - 1, +day.slice(8, 10), h, 0, 0, 0).getTime(); }
+  // Что предложить записать сейчас (окно в приложении): платёж этого месяца не записан, время
+  // напоминания (20:00 дня оплаты или отложенного дня) уже наступило. [{id, name, amount,
+  // walletId, due, late}] по дате оплаты; late - день оплаты уже прошёл.
+  function regularPending(S, nowTs) {
+    var now = isNum(nowTs) ? nowTs : Date.now(), day0 = localDay(now), cur = day0.slice(0, 7), out = [];
+    S.categories.exp.forEach(function (c) {
+      if (!regularLive(S, c)) return;
+      var r = c.regular, d = regularDay(r, cur);
+      // дешёвые проверки времени - до прохода по операциям (тик раз в 30 с, ревью кода 1.0.6)
+      if (!d || now < atHour(d, REGULAR_HOUR) || regularPaid(S, c.id, cur)) return;
+      var due = dueDate(cur, r.day);
+      out.push({ id: c.id, name: c.name, amount: r.amount, walletId: r.walletId, due: due, late: day0 > due });
+    });
+    return out.sort(function (a, b) { return a.due < b.due ? -1 : a.due > b.due ? 1 : (a.id < b.id ? -1 : 1); });
+  }
+  // «Ещё нет»: напомнить завтра в то же время (за концом месяца - в этом месяце больше нет)
+  function snoozeRegular(S, catId, nowTs) {
+    var r = regularOf(S, catId);
+    if (!r) return null;
+    r.snooze = shiftDay(localDay(isNum(nowTs) ? nowTs : Date.now()), 1);
+    return r.snooze;
+  }
 
   function checkMoney(v, zeroOk) {
     var a = Number(v);
@@ -1924,6 +2073,25 @@
       for (var k = 0; k < n; k++) dates.push(dueDate(addMonths(cur, k), w.payDay));
       pushDates(w.id, 'credit', w.name, dates);
     });
+    // 1.0.6 регулярные платежи: одно напоминание в месяц, вечером дня оплаты (после «Ещё нет» -
+    // вечером отложенного дня). Месяц, уже оплаченный (досрочно тоже), пропускаем. Текст без сумм.
+    S.categories.exp.forEach(function (c) {
+      if (!regularLive(S, c)) return;
+      for (var k = 0; k < n; k++) {
+        var m = addMonths(cur, k);
+        var day = regularDay(c.regular, m);
+        if (!day) continue;
+        var at = atHour(day, REGULAR_HOUR);
+        if (at <= now) continue;
+        // будущих операций не бывает (date-future): проход по S.tx - только для текущего месяца
+        if (k === 0 && regularPaid(S, c.id, m)) continue;
+        var due = dueDate(m, c.regular.day);
+        // id «категория|дата оплаты|r»: оболочка отдаёт тапом id и дату (ReminderReceiver.fireDue)
+        out.push({ id: c.id + '|' + due + '|r', at: at, kind: 'regular',
+          title: (day === due ? 'Сегодня день оплаты «' : 'Не записан платёж «') + c.name + '»',
+          text: 'Если уже заплатили, запишите платёж в «Хомяке».' });
+      }
+    });
     function pushDates(id, type, name, dates) {
       dates.forEach(function (due) {
         [-1, 0].forEach(function (off) {
@@ -2435,6 +2603,12 @@
     reopenNonZero: reopenNonZero, debtCloseEvents: debtCloseEvents, deleteDebt: deleteDebt, debtStatus: debtStatus,
     reminderPlan: reminderPlan, walletsTotalAt: walletsTotalAt, netCapital: netCapital,
     netCapitalSeries: netCapitalSeries, debtLoad: debtLoad, debtStats: debtStats, payoffMonths: payoffMonths, monthEnd: monthEnd,
+    // 1.0.6 регулярные платежи
+    REGULAR_HOUR: REGULAR_HOUR, REGULAR_PAID_SHARE: REGULAR_PAID_SHARE, normRegular: normRegular,
+    regularOf: regularOf, regularLive: regularLive, regularActiveCount: regularActiveCount, canAddRegular: canAddRegular,
+    setRegular: setRegular, setRegularOn: setRegularOn, reviveRegular: reviveRegular, regularPaid: regularPaid, regularDay: regularDay,
+    regularOnWallet: regularOnWallet,
+    regularPending: regularPending, snoozeRegular: snoozeRegular,
     // 1.0.4 кредитные карты
     setWalletCredit: setWalletCredit, walletBalanceAt: walletBalanceAt, walletBalancesAt: walletBalancesAt,
     hasCreditCards: hasCreditCards

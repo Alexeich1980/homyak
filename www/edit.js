@@ -447,10 +447,15 @@ function walletForm(pfx, o) {
 }
 
 // backToList — вернуться в список «Настроить кошельки», а не закрыть всё
+// walletDraft - вписанное в форму перед «Скрыть»/«Удалить»: «Отмена» в подтверждении открывает форму
+// с ним, а не с сохранённым (ревью кода 1.0.6; у категории то же - draft, С1)
+var walletDraft = null;
 function editWallet(id, backToList) {
   var w = Engine.findWallet(UI.S, id);
   if (!w) return;
-  var f = walletForm('ec', { name: w.name, icon: w.icon || 'wallet', color: w.color,
+  var dr = walletDraft && walletDraft.id === id ? walletDraft : null;
+  walletDraft = null;
+  var f = walletForm('ec', { name: dr ? dr.name : w.name, icon: dr ? dr.icon : (w.icon || 'wallet'), color: dr ? dr.color : w.color,
     iconTouched: true, wallet: w });
   // у скрытого кошелька вместо «Скрыть» - «Показать»: иначе вернуть его после того, как
   // тост «Вернуть» уехал, было негде
@@ -476,17 +481,37 @@ function editWallet(id, backToList) {
     ],
     onOpen: function () {
       f.bind();
+      function keep() { walletDraft = { id: id, name: $('ecName').value, icon: f.icon, color: f.color }; }
       $('ecHide').addEventListener('click', function () {
-        if (w.hidden) unhideWallet(id, backToList); else hideWallet(id, backToList);
+        if (w.hidden) unhideWallet(id, backToList); else { keep(); hideWallet(id, backToList); }
       });
-      $('ecDel').addEventListener('click', function () { deleteWalletFlow(id, backToList); });
+      $('ecDel').addEventListener('click', function () { keep(); deleteWalletFlow(id, backToList); });
     }
   });
 }
 
-function hideWallet(id, backToList) {
+// Н5 ревью «сломать»: скрыли/удалили кошелёк, на который завязан регулярный платёж, - его
+// напоминания молча прекращались. Теперь подтверждение говорит об этом одной строкой.
+function regularStopLine(walletId) {
+  var n = Engine.regularOnWallet(UI.S, walletId);
+  if (!n.length) return '';
+  var q = n.map(function (x) { return '«' + x + '»'; }).join(', ');
+  return n.length === 1 ? 'Напоминания о регулярном платеже ' + q + ' прекратятся.'
+    : 'Напоминания о регулярных платежах ' + q + ' прекратятся.';
+}
+// confirmed - подтверждение уже было (окно «Удалить нельзя» со строкой про регулярный платёж)
+function hideWallet(id, backToList, confirmed) {
   var w = Engine.findWallet(UI.S, id);
   if (!w) return;
+  var stop = confirmed ? '' : regularStopLine(id);
+  if (stop) {
+    UI.dlgConfirm({ title: 'Скрыть кошелёк?', okLabel: 'Скрыть', text: stop,
+      onOk: function () { hideWallet(id, backToList, true); },
+      // проход по USB 23.10 (С1): «Отмена» - назад в форму кошелька, а не на главный
+      onCancel: function () { editWallet(id, backToList); } });
+    return;
+  }
+  walletDraft = null;   // скрыли - черновик формы больше не нужен
   Engine.updateWallet(UI.S, id, { hidden: true });
   UI.save(); UI.closeDlg(); UI.render(); UI.haptic('medium');
   UI.toast('Кошелёк «' + w.name + '» скрыт', {
@@ -504,6 +529,8 @@ function unhideWallet(id, backToList) {
   if (!w || !w.hidden) return;
   if (!walletGate(backToList)) return;
   Engine.updateWallet(UI.S, id, { hidden: false });
+  // ревью кода 1.0.6: платежи на этом кошельке оживают - как включение (Н2), без окна «просрочки»
+  UI.S.categories.exp.forEach(function (c) { if (c.regular && c.regular.on && c.regular.walletId === id) Engine.reviveRegular(UI.S, c.id); });
   UI.save(); UI.closeDlg(); UI.render(); UI.haptic('light');
   UI.toast('Кошелёк «' + w.name + '» снова на экране');
   if (backToList) setTimeout(openWallets, 0);
@@ -519,16 +546,18 @@ function deleteWalletFlow(id, backToList) {
   if (!w) return;
   if (Engine.walletDebtTxCount(UI.S, id)) { debtWalletNoDelete(id, backToList); return; }
   var n = Engine.walletTxCount(UI.S, id);
-  var text = n
+  var stop = regularStopLine(id);
+  var text = (n
     ? 'У кошелька «' + w.name + '» ' + n + ' ' + Engine.plural(n, 'операция', 'операции', 'операций') +
       '. Удалить кошелёк вместе с операциями? Они сотрутся насовсем. ' +
       'Хотите сохранить историю - нажмите «Скрыть».'
-    : 'Удалить кошелёк «' + w.name + '»?';
+    : 'Удалить кошелёк «' + w.name + '»?') + (stop ? ' ' + stop : '');
   UI.dlgConfirm({
     title: 'Удалить кошелёк?',
     text: text,
     danger: true, okLabel: 'Удалить',
-    onOk: function () { dropWallet(id, backToList); }
+    onOk: function () { dropWallet(id, backToList); },
+    onCancel: function () { editWallet(id, backToList); }
   });
 }
 
@@ -538,16 +567,19 @@ function debtWalletNoDelete(id, backToList) {
   var w = Engine.findWallet(UI.S, id);
   if (!w) return;
   var why = 'С кошелька «' + w.name + '» платили по долгам - удаление стёрло бы историю платежей по долгу. ';
-  if (w.hidden) { UI.dlgAlert(why + 'Кошелёк уже скрыт: на главном его не видно, история цела.', 'Удалить нельзя'); return; }
+  if (w.hidden) { walletDraft = null; UI.dlgAlert(why + 'Кошелёк уже скрыт: на главном его не видно, история цела.', 'Удалить нельзя'); return; }
+  var stop = regularStopLine(id);
   UI.dlgConfirm({
     title: 'Удалить нельзя',
-    text: why + 'Скройте кошелёк: он пропадёт с главного экрана и из «В кошельках», история останется.',
+    text: why + 'Скройте кошелёк: он пропадёт с главного экрана и из «В кошельках», история останется.' + (stop ? ' ' + stop : ''),
     okLabel: 'Скрыть кошелёк',
-    onOk: function () { hideWallet(id, backToList); }
+    onOk: function () { hideWallet(id, backToList, true); },
+    onCancel: function () { editWallet(id, backToList); }
   });
 }
 
 function dropWallet(id, backToList) {
+  walletDraft = null;
   var r;
   try { r = Engine.deleteWallet(UI.S, id); } catch (e) { debtWalletNoDelete(id, backToList); return; }
   if (!r) return;
@@ -582,33 +614,39 @@ function priceUntilOn() {
 // баннер живёт в том же #dlg, и закрытие выкидывало бы на главный экран. Из аналитики
 // back не передаётся - там баннер лежит поверх оверлея #summary, закрытие и так корректно.
 // «Купить» ведёт в UI.buyFullAccess(ret): тот же колбэк возврата, что у «Позже».
-function paywall(back) {
+// why (1.0.6) - причина одной строкой сверху, если окно открыл упор в лимит (регулярный платёж)
+function paywall(back, why) {
   var ret = (typeof back === 'function') ? back : null;
   var pay = payOn();
+  // 1.0.6: окно целиком на экране 360x640 без прокрутки (правило 18.10, проход в песочнице 23.10 -
+  // кнопки были ниже сгиба). Что даёт покупка - три строки вместо заголовков со списком; ключ -
+  // под раскрывашкой «Есть ключ», рядом «Восстановить покупку».
   var body =
     '<div class="pw">' +
-      '<div class="pw-lead">Полный доступ навсегда - одной покупкой, без подписок.</div>' +
-      '<div class="pw-h">Кошельки, категории и долги - сколько нужно</div>' +
-      '<div class="pw-h">Вся аналитика:</div>' +
-      '<ul class="pw-list">' +
-        '<li>сводка месяца</li>' +
-        '<li>лента событий</li>' +
-        '<li>тепловая карта трат</li>' +
-        '<li>зона внимания</li>' +
-        '<li>динамика по месяцам</li>' +
-        '<li>капитал и обязательства</li>' +
+      (why ? '<div class="pw-why" id="pwWhy">' + esc(why) + '</div>' : '') +
+      '<ul class="pw-feat">' +
+        '<li><b>Кошельки, категории, долги и регулярные платежи - сколько нужно</b></li>' +
+        '<li><b>Вся аналитика:</b> сводка, лента, тепловая карта, зона внимания, динамика, капитал</li>' +
+        '<li><b>Таблица Excel:</b> выгрузка и загрузка</li>' +
       '</ul>' +
-      '<div class="pw-h">Таблица Excel</div>' +
-      '<div class="pw-sub">выгрузка и загрузка из других приложений</div>' +
-      '<div class="pw-respect">Покупка поддерживает независимую разработку - без рекламы и подписок.</div>' +
       (pay
-        ? '<div class="pw-price"><b id="pwPrice">' + FULL_PRICE + '</b> <span>· один раз, навсегда</span></div>' +
-          (priceUntilOn() ? '<div class="pw-note">Стартовая цена - до 31 декабря 2026. С нового года будет дороже.</div>' : '')
+        ? '<div class="pw-price"><b id="pwPrice">' + FULL_PRICE + '</b> <span>· один раз, без подписок и рекламы</span></div>' +
+          (priceUntilOn() ? '<div class="pw-until">Стартовая цена - до конца 2026 года, потом дороже.</div>' : '') +
+          // 1.0.6: СБП в шторке RuStore выбран по умолчанию и проходит, «Новая карта» - 1 из 8
+          // (docs/broshennye-oplaty-2026-10.md) - не «выберите», а «оставьте»
+          '<div class="pw-sbp" id="pwSbp">' + PAY_SBP + '</div>' +
+          // строка по проверке до шторки (не вошёл в RuStore / оплата недоступна) - заполняет fillPayHint
+          '<div class="pw-sbp pw-payhint" id="pwPayHint" hidden></div>'
         : '<div class="pw-note">Оплата подключится в ближайшем обновлении. Всё бесплатное работает без ограничений по времени.</div>') +
+      // «Есть ключ» раскрывает офлайн-активацию; «Восстановить покупку» - для случая «купил,
+      // сменил телефон, вошёл в тот же RuStore» (только при подключённой оплате).
+      '<div class="pw-more">' +
+        '<button type="button" class="btn ghost sm pw-keytg" id="pwKeyTg" aria-expanded="false" aria-controls="pwKeyBox">Есть ключ</button>' +
+        (pay ? '<button type="button" class="btn ghost sm" id="pwRestore">Восстановить покупку</button>' : '') +
+      '</div>' +
       // Офлайн-активация лицензионным ключом. Только поле и кнопка - никаких ссылок,
       // адресов и контактов «где купить» (требование Алексея и модерации RuStore).
-      '<div class="pw-key">' +
-        '<div class="pw-key-h">Уже есть ключ? Активируйте его</div>' +
+      '<div class="pw-key" id="pwKeyBox" hidden>' +
         '<div class="pw-key-sub">Лицензионный ключ приобретается отдельно, вне приложения.</div>' +
         '<div class="pw-key-row">' +
           '<input type="text" class="inp" id="pwKey" placeholder="Вставьте ключ" ' +
@@ -617,17 +655,10 @@ function paywall(back) {
         '</div>' +
         '<div class="pw-key-msg" id="pwKeyMsg" hidden></div>' +
       '</div>' +
-      // «Восстановить покупку»: для случая «купил, сменил телефон, вошёл в тот же RuStore».
-      // Только при подключённой оплате - без неё восстанавливать нечем.
-      (pay
-        ? '<div class="pw-restore">' +
-            '<button type="button" class="btn ghost wide" id="pwRestore">Восстановить покупку</button>' +
-          '</div>'
-        : '') +
     '</div>';
   var buttons = [{ label: 'Позже', cls: 'nav', onClick: function () { if (ret) { ret(); return false; } } }];
   if (pay) buttons.push({ label: 'Купить в RuStore - ' + FULL_PRICE, cls: 'primary', onClick: function () {
-    if (window.UI.buyFullAccess) { window.UI.buyFullAccess(ret); return false; }
+    if (window.UI.buyFullAccess) { window.UI.buyFullAccess(ret, why); return false; }
   } });
   UI.openDlg({
     title: 'Полный доступ',
@@ -637,10 +668,39 @@ function paywall(back) {
     onOpen: function () {
       // кнопки пейволла - столбиком: «Купить в RuStore - 990 ₽» целиком в одну строку, сверху
       var bb = $('dlgBtns'); if (bb) bb.classList.add('pw-btns');
+      bindKeyToggle();
       bindActivate(ret);
       if (pay) bindRestore(ret);
       if (pay) fillStorePrice();
+      if (pay) fillPayHint();
     }
+  });
+}
+// 1.0.6: текст подсказки про СБП перед оплатой (один на пейволл; проверяют тесты purchase-106)
+var PAY_SBP = 'В окне оплаты оставьте СБП - это самый надёжный способ.';
+
+// 1.0.6: до шторки спросить RuStore (Pay.precheck): не вошёл - «RuStore может попросить войти…»,
+// оплата недоступна - причина своими словами (UI.payHint). Не знаем - строки нет.
+function fillPayHint() {
+  try {
+    if (!window.Pay || !window.Pay.precheck || !window.UI.payHint) return;
+    window.Pay.precheck().then(function (pc) {
+      var t = window.UI.payHint(pc), el = $('pwPayHint');
+      if (!el || !t) return;
+      el.textContent = t; el.hidden = false;
+    }, function () {});
+  } catch (e) {}
+}
+
+// «Есть ключ» раскрывает поле ключа (стрелка поворачивается); раскрыл - поле в фокусе и видно
+function bindKeyToggle() {
+  var tg = $('pwKeyTg'), box = $('pwKeyBox');
+  if (!tg || !box) return;
+  tg.addEventListener('click', function () {
+    var open = box.hidden;
+    box.hidden = !open;
+    tg.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) { box.scrollIntoView({ block: 'nearest' }); }
   });
 }
 
@@ -743,7 +803,10 @@ function catForm(pfx, o, kind) {
       ? '<div class="ef"><span class="lbl">Лимит в месяц, ₽</span>' +
         '<input class="inp" id="' + pfx + 'Lim" type="text" inputmode="decimal" placeholder="не задан"' +
         (o.limValue != null ? ' value="' + esc(o.limValue) + '"' : '') + '>' +
-        '<div class="hint">Если оставить пустым, лимита нет: приложение просто считает траты. С лимитом кружок категории на главном показывает, сколько осталось, и краснеет при перерасходе.</div></div>'
+        // 1.0.6: в карточке существующей категории под лимитом - строка «Регулярный платёж»,
+        // подсказка в одну строку, чтобы карточка влезала в 360x640 без прокрутки
+        '<div class="hint">' + (o.shortHint ? 'Пусто - лимита нет, траты просто считаются.'
+          : 'Если оставить пустым, лимита нет: приложение просто считает траты. С лимитом кружок категории на главном показывает, сколько осталось, и краснеет при перерасходе.') + '</div></div>'
       : '<div class="ef"><span class="lbl">План на месяц, ₽</span>' +
         '<input class="inp" id="' + pfx + 'Lim" type="text" inputmode="decimal" placeholder="не задан"' +
         (o.limValue != null ? ' value="' + esc(o.limValue) + '"' : '') + '>' +
@@ -772,15 +835,19 @@ function readLimit(pfx) {
   return num(raw);
 }
 
-function editCat(kind, id, backToList) {
+// draft (1.0.6) - несохранённые поля формы {name, lim, icon}: окно «Регулярный платёж» живёт в
+// том же #dlg и, закрываясь, открывает карточку заново с тем, что человек уже вписал
+function editCat(kind, id, backToList, draft) {
   var f2 = Engine.findCategory(UI.S, id);
   if (!f2) return;
   var c = f2.cat, ym = UI.curYM();
   var lim = Engine.catLimit(UI.S, id, ym);
-  var f = catForm('ecat', { name: c.name, icon: UI.S.icons[id] || c.icon, iconTouched: true,
-    limValue: (lim == null ? '' : Engine.fmt(lim)) }, kind);
+  var f = catForm('ecat', { name: draft ? draft.name : c.name, icon: draft ? draft.icon : (UI.S.icons[id] || c.icon), iconTouched: true,
+    limValue: draft ? draft.lim : (lim == null ? '' : Engine.fmt(lim)), shortHint: kind === 'exp' && !!window.Regular }, kind);
+  // 1.0.6: строка «Регулярный платёж» под лимитом - только у расхода (regular.js)
+  var rp = kind === 'exp' && window.Regular ? window.Regular.rowBox(id) : '';
   UI.openDlg({
-    title: kind === 'inc' ? 'Источник дохода' : 'Категория', body: f.body +
+    title: kind === 'inc' ? 'Источник дохода' : 'Категория', body: f.body + rp +
       '<div class="ef-acts"><button class="btn danger" type="button" id="ecatArch">' +
         (kind === 'inc' ? 'Убрать источник в архив' : 'Убрать категорию в архив') + '</button></div>',
     buttons: [
@@ -802,9 +869,17 @@ function editCat(kind, id, backToList) {
     ],
     onOpen: function () {
       f.bind();
+      if (rp) window.Regular.bindRow(id, function () {
+        return { name: $('ecatName').value, lim: $('ecatLim').value, icon: f.icon };
+      }, function (d) { editCat(kind, id, backToList, d); });
       $('ecatArch').addEventListener('click', function () {
+        // С1: «Отмена» - назад в карточку с тем, что уже вписано
+        var draftNow = { name: $('ecatName').value, lim: $('ecatLim') ? $('ecatLim').value : '', icon: f.icon };
+        // Н5: работающий регулярный платёж в архиве замолкает - говорим об этом в том же окне
+        var rpStop = Engine.regularLive(UI.S, c) ? ' Напоминания о регулярном платеже «' + c.name + '» прекратятся.' : '';
         UI.dlgConfirm({ title: 'В архив?', danger: true, okLabel: 'В архив',
-          text: 'Категория «' + c.name + '» уйдёт из выбора. История операций сохранится, вернуть можно из архива.',
+          text: 'Категория «' + c.name + '» уйдёт из выбора. История операций сохранится, вернуть можно из архива.' + rpStop,
+          onCancel: function () { editCat(kind, id, backToList, draftNow); },
           onOk: function () {
             Engine.archiveCategory(UI.S, id, true);
             UI.save(); UI.closeDlg(); UI.render(); UI.haptic('medium');
@@ -818,10 +893,21 @@ function editCat(kind, id, backToList) {
 }
 
 // Вернуть категорию из архива - через тот же гейт, что и добавление (см. catGate).
+// Н12 ревью «сломать»: «архив с платежом → включить второй → вернуть первый» давало два живых
+// платежа в бесплатной версии. Место занято - категория возвращается с выключенным платежом
+// (настройка цела, включить - «Напоминать» в окне платежа после «Полного доступа»).
 function restoreCat(kind, id, backToList) {
   if (!catGate(kind, backToList)) return false;
+  var r = kind === 'exp' ? Engine.regularOf(UI.S, id) : null;
+  var rpOff = !!(r && r.on && !full() && Engine.regularActiveCount(UI.S, id) >= Engine.FREE.regular);
+  if (rpOff) Engine.setRegularOn(UI.S, id, false);
   Engine.archiveCategory(UI.S, id, false);
+  if (!rpOff && r && r.on) Engine.reviveRegular(UI.S, id);   // день оплаты прошёл - месяц закрыт, без окна «просрочки»
   UI.save(); UI.render(); UI.haptic('light');
+  if (rpOff) {
+    var f = Engine.findCategory(UI.S, id);
+    UI.toast('Регулярный платёж «' + (f ? f.cat.name : '') + '» выключен: в бесплатной версии - один');
+  }
   return true;
 }
 
@@ -887,9 +973,9 @@ function openCats(kind) {
       (atCap ? ' <span class="clr-lock">🔒</span>' : '') + '</button>' +
     '</div>';
 
+  // «Скопировать лимиты/планы прошлого месяца» убрана (Алексей 23.10): лимиты и планы сами
+  // переезжают в новый месяц (Engine.carryLimits, 01.10.2026) - кнопка дублировала это.
   var body = tabs + list;
-  body += '<button class="btn ghost wide" type="button" id="clCopy">' +
-    (k === 'inc' ? 'Скопировать планы прошлого месяца' : 'Скопировать лимиты прошлого месяца') + '</button>';
   if (arch.length) {
     body += '<button class="btn ghost wide" type="button" id="clArch">' +
       (catsArchFold ? 'Архив (' + arch.length + ')' : 'Свернуть архив') + '</button>';
@@ -923,19 +1009,6 @@ function openCats(kind) {
         b.addEventListener('click', function () { editCat(k, b.getAttribute('data-id'), true); });
       });
       $('clAdd').addEventListener('click', function () { addCat(k, true); });
-      var cp = $('clCopy');
-      if (cp) cp.addEventListener('click', function () {
-        var now = UI.curYM();
-        var y = parseInt(now.slice(0, 4), 10), m = parseInt(now.slice(5, 7), 10) - 1;
-        var pd = new Date(Date.UTC(y, m - 1, 1));
-        var prev = pd.getUTCFullYear() + '-' + (pd.getUTCMonth() + 1 < 10 ? '0' : '') + (pd.getUTCMonth() + 1);
-        var n = Engine.copyLimits(UI.S, prev, now, k);
-        UI.save(); UI.render(); UI.haptic('light');
-        UI.toast(k === 'inc'
-          ? (n ? ('Скопировано планов: ' + n) : 'В прошлом месяце планов нет')
-          : (n ? ('Скопировано лимитов: ' + n) : 'В прошлом месяце лимитов нет'));
-        openCats(k);
-      });
       var af = $('clArch');
       if (af) af.addEventListener('click', function () { catsArchFold = !catsArchFold; UI.haptic('light'); openCats(k); });
       all($('dlgBody'), '.clrow.arch [data-back]').forEach(function (b) {

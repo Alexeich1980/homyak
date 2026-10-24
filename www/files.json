@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
+  "version": "1.0.6",
   "files": [
     "access.js",
     "anim.js",
@@ -101,6 +101,7 @@
     "pay.js",
     "picker.js",
     "purchase.js",
+    "regular.js",
     "seed.js",
     "sheet.js",
     "sound.js",

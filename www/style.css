@@ -620,15 +620,8 @@ body[data-theme="light"] .btn.ghost { box-shadow: var(--tile-shadow); }
   display: grid; place-items: center;
 }
 .menu-app img { width: 80%; height: 80%; object-fit: contain; display: block; }
-/* название с номером версии стоит по центру круга: .menu-head центрирует своих детей
-   по вертикали, а сам блок названия остаётся строчным - иначе «v0.3.2» уехал бы на
-   отдельную строку всегда, а не только когда номеров два (.menu-ver.two) */
+/* название по центру круга: .menu-head центрирует своих детей по вертикали */
 .menu-title { flex: 1 1 auto; min-width: 0; align-self: center; font-size: 20px; font-weight: 800; line-height: 1.25; }
-/* номер версии рядом с названием: приглушённый, не спорит с заголовком */
-.menu-ver { font-size: 12px; font-weight: 700; color: var(--muted); margin-left: 8px; letter-spacing: .2px; }
-/* когда веб-сборка уехала вперёд оболочки, номеров два: они уходят на свою строку
-   под названием, а не растаскивают шапку меню на две высоты */
-.menu-ver.two { display: block; margin-left: 0; margin-top: 2px; }
 /* чип статуса Free/Pro у версии. Pro - золото (ценность, не ошибка), Free - приглушённый
    пилюлей; Free тапается (мягкий апселл), Pro - просто статус. Работает в обеих темах. */
 .tier-chip {
@@ -1337,6 +1330,8 @@ body[data-theme="dark"] .sh-amt { font-size: 34px; letter-spacing: -.8px; }
 /* «Изменить баланс» — длинная подпись, ей своя строка; «Перевести» и «Настроить»
    встают под ней парой. Втроём в ряд подписи не читались бы на 360 px. */
 .sh-acts .btn.w100 { flex: 1 1 100%; }
+/* 1.0.6: «Как пользоваться» в «О приложении» - во всю ширину (w100 был только для .sh-acts) */
+#dlg .btn.ab-howto { width: 100%; }
 .sh-acts:empty { display: none; }
 .sh-plan {
   flex: 1 1 100%; display: block; padding: 4px 0;
@@ -1882,10 +1877,7 @@ body[data-theme="light"] .demo-bar { background: var(--surface); border: 1px sol
 @media (prefers-reduced-motion: reduce) { .mi.has-upd .mi-ic { animation: none; color: var(--accent); } }
 
 /* экран «Полный доступ» (paywall) */
-.pw-lead { font-size: 14px; color: var(--muted); margin-bottom: 12px; }
-.pw-list { margin: 0 0 14px; padding-left: 18px; }
-.pw-list li { margin: 4px 0; font-size: 14px; }
-.pw-price { font-size: 22px; font-weight: 800; color: var(--text); }
+.pw-price { font-size: 22px; font-weight: 800; color: var(--text); margin-top: 8px; line-height: 1.25; }
 .pw-price span { font-size: 13px; font-weight: 600; color: var(--muted); }
 
 /* премиум-разделы аналитики (доступны в «Полном доступе»): замок на карточках выбора в free */
@@ -1895,17 +1887,17 @@ body[data-theme="light"] .demo-bar { background: var(--surface); border: 1px sol
   content: "🔒"; position: absolute; top: 10px; right: 12px; font-size: 15px; line-height: 1; opacity: .85;
 }
 
-/* блоки в баннере «Полный доступ» */
-.pw-h { font-weight: 800; font-size: 15px; margin: 12px 0 4px; }
-.pw .pw-list { margin: 0 0 4px; padding-left: 20px; }
-.pw-sub { font-size: 13px; color: var(--muted); margin: 0 0 4px; }
-.pw-respect { margin: 12px 0 4px; font-size: 14px; color: var(--muted); }
+/* блоки в баннере «Полный доступ» (1.0.6: всё окно на 360x640 без прокрутки) */
+.pw-feat { list-style: none; margin: 0; padding: 0; }
+.pw-feat li { position: relative; padding-left: 20px; margin: 0 0 3px; font-size: 13px; line-height: 1.38; color: var(--secondary); }
+.pw-feat li b { color: var(--text); font-weight: 800; }
+.pw-feat li::before { content: ""; position: absolute; left: 3px; top: 4px; width: 5px; height: 9px; border-right: 2px solid var(--accent); border-bottom: 2px solid var(--accent); transform: rotate(45deg); }
+.pw-until { margin: 2px 0 0; font-size: 12.5px; line-height: 1.4; color: var(--secondary); }
 /* оплата ещё не подключена: честная строка вместо цены и кнопки «Купить» */
 .pw-note { margin: 12px 0 2px; padding: 10px 12px; border-radius: 12px; background: var(--btn-ghost); border: 1px solid var(--surface-bd); font-size: 13px; line-height: 1.4; color: var(--secondary); }
 
 /* офлайн-активация лицензионным ключом: поле + «Активировать». Без ссылок/контактов. */
-.pw-key { margin: 14px 0 2px; padding-top: 12px; border-top: 1px solid var(--surface-bd); }
-.pw-key-h { font-weight: 800; font-size: 14px; margin-bottom: 4px; color: var(--text); }
+.pw-key { margin: 10px 0 2px; }
 .pw-key-sub { font-size: 12px; color: var(--muted); margin-bottom: 8px; }
 .pw-key-row { display: flex; gap: 8px; align-items: stretch; }
 .pw-key-row .inp { flex: 1 1 auto; min-width: 0; }
@@ -1913,8 +1905,15 @@ body[data-theme="light"] .demo-bar { background: var(--surface); border: 1px sol
 .pw-key-msg { margin: 8px 0 0; font-size: 13px; line-height: 1.4; color: var(--secondary); }
 .pw-key-msg.bad { color: var(--num-over); font-weight: 700; }
 
-/* «Восстановить покупку»: тихая ссылка-кнопка под блоком лицензионного ключа */
-.pw-restore { margin: 12px 0 2px; }
+/* «Есть ключ» (раскрывашка со стрелкой) и «Восстановить покупку» - тихий ряд под ценой */
+.pw-more { display: flex; gap: 8px; margin: 10px 0 2px; padding-top: 10px; border-top: 1px solid var(--surface-bd); }
+.pw-more .btn { flex: 1 1 0; min-width: 0; white-space: nowrap; padding: 8px 10px; }
+.pw-keytg::after { content: ""; flex: none; width: 6px; height: 6px; margin: 0 0 3px 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; }
+.pw-keytg[aria-expanded="true"]::after { transform: rotate(-135deg); margin-bottom: -3px; border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .pw-keytg::after { transition: none; } }
+/* 1.0.6: строка про СБП под ценой и строка проверки до шторки (вход в RuStore / оплата недоступна) */
+.pw-sbp { margin: 6px 0 0; font-size: 13px; line-height: 1.4; color: var(--secondary); }
+.pay-vpn { color: var(--muted); }
 
 /* абзац в «О приложении» */
 .ab-p { margin: 0 0 8px; font-size: 14px; line-height: 1.5; color: var(--text); }
@@ -1933,8 +1932,16 @@ body[data-theme="light"] .demo-bar { background: var(--surface); border: 1px sol
 #dlg.dlg-about .ab-lead { margin: 0 0 8px; }
 #dlg.dlg-about .ab-h { margin: 9px 0 3px; font-size: 13.5px; }
 #dlg.dlg-about .ab-p { margin: 0 0 4px; font-size: 13px; line-height: 1.4; }
-#dlg.dlg-about .ab-list { margin: 2px 0 4px; padding-left: 18px; }
-#dlg.dlg-about .ab-list li { margin: 1px 0; }
+/* 1.0.6: «Как пользоваться» - своё окно, темы-раскрывашки с видимой стрелкой, открыта одна */
+#dlg.dlg-about .ab-howto { margin: 6px 0 2px; min-height: 40px; }
+#dlg.dlg-howto .ab-help { border-top: 1px solid var(--surface-bd); }
+#dlg.dlg-howto .ab-qa { border-bottom: 1px solid var(--surface-bd); }
+#dlg.dlg-howto .ab-qa summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; padding: 2px 2px; font-size: 14px; font-weight: 700; color: var(--text); }
+#dlg.dlg-howto .ab-qa summary::-webkit-details-marker { display: none; }
+#dlg.dlg-howto .ab-qa summary::after { content: ""; flex: none; width: 7px; height: 7px; margin: 0 6px 3px 0; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(45deg); transition: transform .2s; }
+#dlg.dlg-howto .ab-qa[open] summary::after { transform: rotate(-135deg); margin-bottom: -3px; border-color: var(--accent); }
+#dlg.dlg-howto .ab-qa .ab-p { margin: 0 2px 10px; font-size: 13.5px; line-height: 1.45; color: var(--text); }
+@media (prefers-reduced-motion: reduce) { #dlg.dlg-howto .ab-qa summary::after { transition: none; } }
 #dlg.dlg-about .ab-linkrow { margin: 0; }
 #dlg.dlg-about .ab-link { padding: 2px 0; min-height: 0; }
 #dlg.dlg-about .ab-author { margin: 2px 0 0; }
@@ -2283,6 +2290,21 @@ body[data-theme="light"] .wcard.debt.owed { --accent-soft: rgba(127,200,169,.60)
 .cr-more > .ef { margin-bottom: 10px; }
 .set-row.cr-dis .mi-sw { opacity: .4; }
 .set-row.cr-dis .set-t { color: var(--muted); }
+/* 1.0.6: регулярный платёж (regular.js) - строка в карточке категории, окно настройки, вечернее окно */
+.rp-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.rp-two > .ef { min-width: 0; }
+/* строка-вход в карточке категории: стрелка «›» справа - тап открывает окно настройки (тест Алексея 23.10) */
+.set-row .set-chev { flex: 0 0 auto; align-self: center; font-size: 22px; line-height: 1; color: var(--muted); margin-right: 2px; }
+/* «Напоминать» в окне настройки - выключатель в строке заголовка справа, по высоте места не берёт */
+#dlg .rp-on { position: absolute; top: 24px; right: 10px; display: flex; align-items: center; gap: 8px; padding: 8px; background: none; border: 0; z-index: 3; color: var(--muted); font: inherit; font-size: 12px; font-weight: 600; }
+/* узкий экран (320 px): подпись «Напоминать» налезала на заголовок - остаётся только выключатель */
+@media (max-width: 340px) { #dlg .rp-on-t { display: none; } }
+#dlg .rp-on .mi-sw { display: block; position: relative; top: auto; right: auto; margin: 0; }
+.rp-q { font-size: 16px; line-height: 1.4; font-weight: 600; color: var(--text); margin-bottom: 10px; }
+.rp-hint { margin: 0 0 16px; line-height: 1.4; }
+/* Н3: запрет уведомлений - кнопка в настройки Android в окне настройки платежа */
+.btn.rp-perm { width: 100%; margin-top: 4px; font-size: 13px; }
+.pw-why { font-size: 13.5px; line-height: 1.35; font-weight: 700; color: var(--text); margin-bottom: 8px; }
 
 /* карточка долга */
 .sh-ico.debt { background: rgba(240,138,126,.18); color: var(--lv-over); }

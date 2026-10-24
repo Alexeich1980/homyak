@@ -83,7 +83,9 @@ test('ui.js: строка «Подсветка экрана», уровень Д
   const ui = rd('www/ui.js');
   assert.match(ui, /\{ id: 'snGlow', key: 'glow', t: 'Подсветка экрана'/);
   assert.match(ui, /PREF_TOGGLE = \{ snSound: toggleSound, snHaptic: toggleHaptic, snHints: toggleHints, snGlow: toggleGlow \}/);
-  const a = ui.indexOf('function amSave()'), b = ui.indexOf('\n}\n', a);
+  // 1.0.6: запись экрана суммы вынесена в recordTx (ей же пишет окно регулярного платежа)
+  assert.match(ui, /recordTx\(amOp, v, amDate, amNote, true\);/);
+  const a = ui.indexOf('function recordTx('), b = ui.indexOf('\n}\n', a);
   const s = ui.slice(a, b);
   const pre = s.indexOf('var before = txLevel(op.kind, op.catId, mo);');
   assert.ok(pre > 0 && pre < s.indexOf('Engine.addTx('), 'уровень категории не снят до записи');

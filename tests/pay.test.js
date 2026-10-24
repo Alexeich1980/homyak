@@ -83,7 +83,15 @@ test('createRuStorePayment: отмена / недоступность / ошиб
   assert.strictEqual(r.unavailable, true);
 
   r = await mk({ ok: false, error: 'Платёж не прошёл' }).purchase();
-  assert.strictEqual(r.error, 'Платёж не прошёл');
+  assert.strictEqual(r.status, 'error'); assert.strictEqual(r.ok, false);
+
+  // контракт сессии покупки (1.0.6, ревью кода max): status - главное поле; ok:"true" - не покупка (FAIL-CLOSED)
+  r = await mk({ status: 'pending', purchaseId: 'p-1', paying: true }).purchase();
+  assert.deepStrictEqual([r.status, r.purchaseId, r.paying], ['pending', 'p-1', true]);
+  r = await mk({ status: 'ok', ok: 'true' }).purchase();
+  assert.strictEqual(r.ok, false, 'ok:"true" открыл Pro');
+  r = await mk({ status: 'busy' }).purchase();
+  assert.strictEqual(r.status, 'busy');
 
   // цены нет / ошибка getProducts → null (UI покажет свою строку)
   assert.strictEqual(await mk({}).getPriceLabel(), null);

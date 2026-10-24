@@ -170,3 +170,20 @@ test('walletsTotal совпадает с summary.balance', () => {
   tx(S, { kind: 'exp', amount: 1234.5, catId: 'e1', walletId: 'w1', date: '2026-09-02' }, 10);
   assert.equal(Engine.summary(S, '2026-09').balance, Math.round(Engine.walletsTotal(S)));
 });
+
+// 24.10 (статья о «Хомяке»): в дне с платежом по кредиту «изменение» не учитывало платёж,
+// а «остаток на конец дня» - учитывал. Операции долга входят в изменение, как в остаток.
+test('feedByDay: «изменение» дня учитывает платёж по долгу и «взял в долг»', () => {
+  const S = Engine.defaultState();
+  const w = Engine.addWallet(S, { name: 'Карта', base: 100000 });
+  w.baseTs = 0;
+  const d = Engine.addDebt(S, { type: 'owe', name: 'Кредит', amount: 300000, pay: 15000, day: 10, now: 0, date: '2026-01-01' });
+  Engine.payDebt(S, { debtId: d.id, walletId: w.id, amount: 15000, date: '2026-10-10' });
+  S.tx.push({ id: 'e1', kind: 'exp', amount: 500, date: '2026-10-10', ts: 5, catId: null, walletId: w.id, toWalletId: null });
+  const days = Engine.feedByDay(S, '2026-10');
+  const day = days.find((x) => x.date === '2026-10-10');
+  assert.equal(day.change, -15500, 'платёж по кредиту не вошёл в изменение дня');
+  const t = S.tx.find((x) => x.kind === 'debt');
+  t.op = 'take';
+  assert.equal(Engine.feedByDay(S, '2026-10').find((x) => x.date === '2026-10-10').change, 14500, '«взял в долг» не вошло в изменение');
+});

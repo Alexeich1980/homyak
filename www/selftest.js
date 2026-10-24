@@ -908,14 +908,14 @@ add('звук: чужие имена не играются, выключател
   } finally { UI.S.ui.sound = was; Sound.reset(); }
 });
 
-// (18б) версия — из одного источника (version.js), в шапке меню только major.minor
-add('меню: версия в шапке — только v<major.minor>, без оболочки/сборки', function () {
+// (18б) версия - из одного источника (version.js). 22.10 (Алексей): в шапке меню версии нет,
+// она в плитке «Обновление» и в «О приложении»
+add('меню: в шапке нет версии, в «Обновление» - полная', function () {
   ok(/^\d+\.\d+\.\d+$/.test(String(window.APP_VERSION || '')), 'APP_VERSION не задан или не «0.2.0»: ' + window.APP_VERSION);
   UI.openMenu();
-  var mv = document.getElementById('menuVer').textContent;
-  eq(mv, 'v' + UI.menuVersion(), 'номер в шапке меню');
-  ok(/^v\d+\.\d+$/.test(mv), 'в шапке не «v0.4», а «' + mv + '»');
-  ok(mv.indexOf('оболочка') < 0, 'в шапке осталась «оболочка»: ' + mv);
+  var head = document.querySelector('#menu .menu-title').textContent;
+  ok(!/\d/.test(head), 'в шапке меню цифры версии: «' + head + '»');
+  ok(document.getElementById('menu').textContent.indexOf('версия ' + window.APP_VERSION) >= 0, 'в «Обновление» нет полной версии');
   UI.closeMenu();
 });
 
@@ -953,15 +953,11 @@ add('меню: «О приложении» — суть, список, авто�
   ok(body.querySelector('.about'), 'окно не в стиле приложения (нет .about)');
   ok(body.querySelector('.ab-lead'), 'нет строки «что это»');
   ok(body.textContent.indexOf('без облака') >= 0, 'нет строки про приватность');
-  ok(body.textContent.indexOf('v' + UI.menuVersion()) >= 0, 'нет короткого номера версии');
-  ok(body.textContent.indexOf('Жесты и настройки') >= 0, 'нет заголовка «Жесты и настройки»');
+  ok(body.textContent.indexOf('v' + window.APP_VERSION) >= 0, 'нет полного номера версии');
   ok(body.textContent.indexOf('Ещё') < 0, 'остался старый заголовок «Ещё»');
-  // «Как записывать операции» — маркированный список, каждый пункт своей строкой
-  var items = [].map.call(body.querySelectorAll('.ab-list li'), function (li) { return li.textContent; });
-  ok(items.length === 5, 'в списке не 5 пунктов, а ' + items.length);
-  ['кошелёк на категорию расхода - расход', 'источник дохода на кошелёк - доход',
-   'кошелёк на кошелёк - перевод', 'кошелёк на долг - платёж по долгу', 'долг на кошелёк - взяли в долг или вам вернули']
-    .forEach(function (t, i) { eq(items[i], t, 'пункт ' + (i + 1)); });
+  // 1.0.6: «Как пользоваться» - кнопка в «О приложении», ведёт в своё окно с темами (ниже)
+  var how = document.getElementById('abHowto');
+  ok(how && how.tagName === 'BUTTON' && how.textContent === 'Как пользоваться', 'нет кнопки «Как пользоваться»');
   ok(body.textContent.indexOf('Финансовый консультант Алексей Дорохин') >= 0, 'нет строки автора');
   var a = body.querySelector('.ab-contacts .ab-link[data-ext]');
   ok(a && a.tagName === 'A', 'ссылка не ссылка');
@@ -976,6 +972,45 @@ add('меню: «О приложении» — суть, список, авто�
   ok(dlg.scrollHeight <= dlg.clientHeight + 1,
     'окно «О приложении» прокручивается: ' + dlg.scrollHeight + ' > ' + dlg.clientHeight);
   UI.closeDlg();
+  if (UI.closeMenu) UI.closeMenu();
+});
+
+// 1.0.6 (Алексей 22.10): инструкция «Как пользоваться» - темы-раскрывашки со стрелкой, текст
+// согласован (docs/help-106-approved.md); окно без прокрутки, открыта одна тема, «Назад» - в «О приложении»
+add('1.0.6 инструкция: 11 тем-раскрывашек, одна открыта, без прокрутки, назад в «О приложении»', function () {
+  document.getElementById('mAbout').click();
+  document.getElementById('abHowto').click();
+  eq(document.getElementById('dlgTitle').textContent, 'Как пользоваться', 'окно инструкции не открылось');
+  var dlg = document.getElementById('dlg');
+  ok(!dlg.classList.contains('dlg-about'), 'плотная вёрстка «О приложении» переехала на окно инструкции');
+  var qa = document.querySelectorAll('#dlgBody details.ab-qa');
+  eq(qa.length, 11, 'тем в инструкции');
+  var titles = [].map.call(qa, function (d) { return d.querySelector('summary').textContent; });
+  ['Запись операций', 'Кошельки, категории и лимиты', 'Заметки', 'Подсветка и звук', 'Долги и кредитные карты',
+   'Регулярные платежи', 'Аналитика', 'Копия данных и Excel', 'Защита входа', 'Полный доступ', 'Обновления']
+    .forEach(function (t, i) { eq(titles[i], t, 'тема ' + (i + 1)); });
+  ok([].every.call(qa, function (d) { return !d.open; }), 'тема открыта сразу');
+  var sm = qa[0].querySelector('summary');
+  ok(sm.getBoundingClientRect().height >= 32, 'строка темы ниже 32 px - трудно попасть пальцем: ' + Math.round(sm.getBoundingClientRect().height));
+  ok(getComputedStyle(sm, '::after').content !== 'none', 'у темы нет стрелки');
+  ok(dlg.scrollHeight <= dlg.clientHeight + 1, 'свернутое окно инструкции прокручивается: ' + dlg.scrollHeight + ' > ' + dlg.clientHeight);
+  // текст согласован дословно - ключевые фразы на месте
+  var all = [].map.call(qa, function (d) { return d.textContent; }).join(' ');
+  ['На экране указания суммы есть кнопка «Заметка»', 'Долг заводят через «+» в списке кошельков',
+   'Аренда, подписки, связь и пр.', 'Данные хранятся только на вашем устройстве', 'пин-код и вход по биометрии',
+   'дольше 5 минут', '1 регулярный платёж', 'В этот день в\u00a020:00']
+    .forEach(function (p) { ok(all.indexOf(p) >= 0, 'нет согласованной фразы: ' + p); });
+  ok(all.indexOf('—') < 0, 'длинное тире в инструкции');
+  // одна тема за раз
+  qa[1].open = true; qa[1].dispatchEvent(new Event('toggle'));
+  qa[5].open = true; qa[5].dispatchEvent(new Event('toggle'));
+  ok(!qa[1].open && qa[5].open, 'открыты две темы сразу');
+  ok(qa[5].querySelector('.ab-p').getBoundingClientRect().height > 20, 'текст темы не виден');
+  // «Назад» - в «О приложении»
+  [].forEach.call(document.querySelectorAll('#dlgBtns button'), function (b) { if (b.textContent === 'Назад') b.click(); });
+  eq(document.getElementById('dlgTitle').textContent, 'О приложении', '«Назад» не вернул в «О приложении»');
+  UI.closeDlg();
+  if (UI.closeMenu) UI.closeMenu();
 });
 
 // (19-стор) 1.0.3: стор-сборка спрашивает RuStore App Update SDK (подложенный плагин), в сеть
@@ -1654,7 +1689,7 @@ add('меню: хомяк в шапке и номер версии рядом', 
   var r = disc.getBoundingClientRect();
   eq(Math.round(r.width), 48, 'диск хомяка не 48 px');
   eq(Math.round(r.height), 48, 'диск хомяка не круглый');
-  ok(document.getElementById('menuVer').textContent.indexOf('v') === 0, 'в шапке нет версии');
+  ok(!document.getElementById('menuVer'), 'в шапке снова версия');
 });
 
 
@@ -4668,8 +4703,9 @@ add('долги: подсказки 14.10 - пустая история, ста�
     UI.closeDlg();
     // «О приложении»
     document.getElementById('mAbout').click();
-    ok(txt('dlgBody').indexOf('долг на кошелёк - взяли в долг или вам вернули') >= 0, 'в «О приложении» нет жеста «долг на кошелёк»');
-    UI.closeDlg(); UI.closeMenu();
+    document.getElementById('abHowto').click();   // 1.0.6: жесты - в окне «Как пользоваться», тема «Запись операций»
+    ok(txt('dlgBody').indexOf('долг на кошелёк - взяли в долг или вам вернули') >= 0, 'в «Как пользоваться» нет жеста «долг на кошелёк»');
+    UI.closeDlg(); UI.closeDlg(); UI.closeMenu();   // окно инструкции → «О приложении» → меню
     // подсказка хомяка после первого долга: одна, гасится, слушает общий выключатель
     UI.S.ui.hints = true;
     if (UI.S.ui.hintsDismissed) delete UI.S.ui.hintsDismissed.debts;
@@ -5940,13 +5976,13 @@ add('кредитка: «Капитал и обязательства» - стр
   } finally { UI.hasFullAccess = h0; UI.closeSummary(); dropCredit(); }
 });
 
-// (14.10, владелец) в баннере покупки под «Кошельки, категории и долги - сколько нужно» нет строки
+// (14.10, владелец) в баннере покупки под «Кошельки, категории, долги и регулярные платежи - сколько нужно» нет строки
 // «до N кошельков и долгов, M категорий»: «до 100 категорий» читали как лимит бесплатной версии.
 add('баннер покупки: без строки «до N … категорий» под «сколько нужно»', function () {
   try {
     UI.paywall();
     var t = document.getElementById('dlgBody').textContent;
-    ok(t.indexOf('Кошельки, категории и долги - сколько нужно') >= 0, 'пропал заголовок «Кошельки, категории и долги - сколько нужно»');
+    ok(t.indexOf('Кошельки, категории, долги и регулярные платежи - сколько нужно') >= 0, 'пропал заголовок «Кошельки, категории, долги и регулярные платежи - сколько нужно»');
     ok(!/до\s*\d/.test(t), 'в баннере покупки «до N»: ' + t);
     ok(!/\d[\d\u00a0 ]*\s*(кошельк|категори)/.test(t), 'в баннере покупки число кошельков/категорий: ' + t);
   } finally { UI.closeDlg(); }
@@ -6852,6 +6888,484 @@ add('телефон 1.0.5: «плюс» возвращается после за
   ok(fab.hidden, 'перерисовка при аналитике показала «плюс»');
   UI.closeSummary();
   ok(!fab.hidden, 'после закрытия аналитики «плюса» нет');
+});
+
+// ---------- покупка «Полного доступа» 1.0.6 (на настоящем экране) ----------
+// Разбор брошенных оплат (docs/broshennye-oplaty-2026-10.md) и ревью кода max 24.10.2026 (механика «Понятной пенсии»
+// 1.0.7: сессия покупки в плагине, одна машина состояний, очередь окон). Здесь - что видит человек в DOM, с мок-плагином
+// RuStorePay по контракту (адаптер настоящий, pay.js). node-тесты того же флоу - tests/purchase-106.test.js,
+// tests/pay-review-106.test.js.
+function payWorld(o) {
+  o = o || {};
+  var w = { purchases: 0, acks: [], owned: !!o.owned, sheet: o.sheet, check: o.check || function () { return 'pending'; },
+    pre: o.precheck || { authorized: true, installed: true, available: true }, late: [] };
+  var plugin = {
+    // шторка: объект-итог сразу, 'hang' - открыта и ждёт (w.endSheet(итог) - ответ плагина)
+    purchase: function () {
+      w.purchases++;
+      if (w.sheet === 'hang') return new Promise(function (r) { w.endSheet = r; });
+      return Promise.resolve(w.sheet);
+    },
+    checkPurchase: function (a) { return Promise.resolve({ status: w.check(a.purchaseId), purchaseId: a.purchaseId }); },
+    getPurchases: function () {
+      return Promise.resolve(w.owned ? { owned: true, authorized: true, purchaseId: 'st-1', ackPending: true } : { owned: false, authorized: true, pending: false });
+    },
+    getProducts: function () { return Promise.resolve({ ok: true, priceLabel: '990.00 руб.' }); },
+    precheck: function () { return Promise.resolve(w.pre); },
+    acknowledge: function (a) { w.acks.push(a.purchaseId); return Promise.resolve({ ok: true }); },
+    addListener: function (ev, fn) { if (ev === 'purchaseLate') w.late.push(fn); return Promise.resolve({ remove: function () {} }); }
+  };
+  w.pay0 = Access.PAY; w.ca0 = Pay.currentAdapter; w.had = Pay.isPurchasedSync();
+  Access.PAY = true;
+  if (w.had) Pay.clearPurchase();
+  Pay.currentAdapter = function () { return Pay.createRuStorePayment(plugin); };
+  UI.purchaseTimings({ pollMs: 60, waitMs: 3000, ownsMs: 1500, queueMs: 50 });
+  w.done = function () {
+    Access.PAY = w.pay0; Pay.currentAdapter = w.ca0;
+    if (Pay.isPurchasedSync() !== w.had) { if (w.had) Pay.markPurchased(); else Pay.clearPurchase(); }
+    UI.purchaseTimings({ pollMs: 5000, waitMs: 180000, ownsMs: 8000, restoreMs: 15000, resumeGapMs: 15000, queueMs: 400 });
+    for (var i = 0; i < 4 && UI.dlgOpen(); i++) UI.closeDlg();
+    UI.render();
+  };
+  return w;
+}
+function payText(id) { var e = document.getElementById(id); return e ? e.textContent : ''; }
+function payBtnLabels() { return Array.prototype.map.call(document.querySelectorAll('#dlgBtns .btn'), function (b) { return b.textContent; }); }
+function payBtn(label) { return Array.prototype.filter.call(document.querySelectorAll('#dlgBtns .btn'), function (b) { return b.textContent.indexOf(label) === 0; })[0]; }
+// «откуда пришли»: чужое окно (как карточка категории)
+function payCard() { UI.dlgAlert('Карточка категории', 'Карточка'); }
+
+add('покупка 1.0.6: пейволл - «990\u00a0₽» из «990.00 руб.», строка про СБП и про вход в RuStore', function () {
+  var w = payWorld({ precheck: { authorized: false, installed: true, available: true } });
+  UI.paywall();
+  return waitFor(function () { return payText('pwPrice') === '990\u00a0₽' && !document.getElementById('pwPayHint').hidden; }, 3000).then(function () {
+    eq(payText('pwPrice'), '990\u00a0₽', 'цена в пейволле');
+    ok(payBtn('Купить в RuStore'), 'нет кнопки «Купить»');
+    eq(payBtn('Купить в RuStore').textContent, 'Купить в RuStore - 990\u00a0₽', 'цена на кнопке');
+    var sbp = document.getElementById('pwSbp');
+    ok(sbp && sbp.offsetHeight > 0 && /оставьте СБП/.test(sbp.textContent), 'строки про СБП не видно');
+    var h = document.getElementById('pwPayHint');
+    ok(!h.hidden && h.offsetHeight > 0, 'строка про вход в RuStore не показана');
+    eq(h.textContent, 'RuStore может попросить войти. Без входа проще через СБП.', 'строка про вход');
+  }).then(w.done, function (e) { w.done(); throw e; });
+});
+
+add('покупка 1.0.6: отмена в шторке - окно «Оплата не прошла», «Попробовать снова» - тот же пейволл с причиной и снова шторка', function () {
+  var w = payWorld({ sheet: { status: 'cancelled', cancelled: true } });
+  var why = 'В бесплатной версии - один регулярный платёж.';
+  UI.paywall(null, why);
+  payBtn('Купить в RuStore').click();
+  return waitFor(function () { return payText('dlgTitle') === 'Оплата не прошла'; }, 4000).then(function () {
+    ok(!document.getElementById('dlg').hidden, 'окна не видно');
+    var body = payText('dlgBody');
+    ok(/СБП/.test(body), 'нет совета про СБП: ' + body);
+    ok(/VPN/.test(body), 'нет строки про VPN: ' + body);
+    ok(body.indexOf('Восстановить покупку') < 0, 'ложный совет «Восстановить покупку»: ' + body);
+    eq(payBtnLabels().join('|'), 'Позже|Попробовать снова', 'кнопки окна');
+    w.sheet = 'hang';
+    payBtn('Попробовать снова').click();
+    return waitFor(function () { return w.purchases === 2; }, 4000);
+  }).then(function () {
+    eq(w.purchases, 2, '«Попробовать снова» не открыл шторку');
+    eq(payText('pwWhy'), why, '«Попробовать снова» потерял строку причины');
+    w.endSheet({ status: 'cancelled', cancelled: true });
+    return waitFor(function () { return payText('dlgTitle') === 'Оплата не прошла'; }, 4000);
+  }).then(w.done, function (e) { w.done(); throw e; });
+});
+
+add('покупка 1.0.6: карточка → пейволл → «Купить» → «Готово» → закрыли - снова карточка', function () {
+  var w = payWorld({ sheet: { status: 'ok', ok: true, purchaseId: 'ok-1' } });
+  payCard();
+  UI.paywall(payCard, 'В бесплатной версии - один регулярный платёж.');
+  payBtn('Купить в RuStore').click();
+  return waitFor(function () { return payText('dlgTitle') === 'Готово'; }, 4000).then(function () {
+    ok(Pay.isPurchasedSync(), 'доступ не открыт');
+    eq(w.acks.join(','), 'ok-1', 'выдача товара не отмечена');
+    payBtn('Понятно').click();
+    eq(payText('dlgTitle'), 'Карточка', '«Готово» не вернул в карточку');
+  }).then(w.done, function (e) { w.done(); throw e; });
+});
+
+add('покупка 1.0.6: оплата в обработке - «Оплата обрабатывается», «Купить» спрашивает «Подождать»/«Оплатить снова», подтверждение → «Готово»', function () {
+  var st = 'pending';
+  var w = payWorld({ sheet: { status: 'pending', pending: true, purchaseId: 'pp-1', paying: true }, check: function () { return st; } });
+  UI.paywall();
+  payBtn('Купить в RuStore').click();
+  return waitFor(function () { return payText('dlgTitle') === 'Оплата обрабатывается'; }, 4000).then(function () {
+    ok(/Не платите второй раз/.test(payText('dlgBody')), 'нет предупреждения о второй оплате');
+    ok(UI.purchaseBusy(), 'ожидание не держит замок');
+    UI.buyFullAccess();
+    eq(w.purchases, 1, 'вторая шторка при оплате в обработке');
+    // решение владельца 24.10: «Купить» при оплате в обработке спрашивает - «Подождать» / «Оплатить снова»
+    eq(payText('dlgTitle'), 'Предыдущая оплата ещё проверяется', 'окно выбора');
+    eq(payBtnLabels().join('|'), 'Подождать|Оплатить снова', 'кнопки окна выбора');
+    st = 'ok';
+    return waitFor(function () { return payText('dlgTitle') === 'Готово'; }, 4000);
+  }).then(function () {
+    ok(Pay.isPurchasedSync(), 'доступ не открыт');
+    eq(w.acks.join(','), 'pp-1', 'выдача товара не отмечена');
+  }).then(w.done, function (e) { w.done(); throw e; });
+});
+
+add('покупка 1.0.6: поздний успех, пока открыто чужое окно, - «Готово» ждёт его закрытия', function () {
+  var w = payWorld({ sheet: 'hang' });
+  UI.paywall();
+  payBtn('Купить в RuStore').click();
+  return sleep(200).then(function () {
+    ok(UI.purchaseBusy(), 'покупка не числится идущей');
+    w.endSheet({ status: 'cancelled', cancelled: true, purchaseId: 'lt-1' });   // плагин: возврат по иконке, оплаты нет
+    return waitFor(function () { return payText('dlgTitle') === 'Оплата не прошла'; }, 4000);
+  }).then(function () {
+    payBtn('Позже').click();
+    payCard();
+    w.late.forEach(function (f) { f({ status: 'ok', ok: true, purchaseId: 'lt-1' }); });   // purchaseLate
+    return sleep(200);
+  }).then(function () {
+    ok(Pay.isPurchasedSync(), 'поздний успех не открыл доступ');
+    eq(payText('dlgTitle'), 'Карточка', 'итог покупки затёр чужое окно');
+    payBtn('Понятно').click();
+    return waitFor(function () { return payText('dlgTitle') === 'Готово'; }, 3000);
+  }).then(function () {
+    eq(payText('dlgTitle'), 'Готово', 'после закрытия чужого окна «Готово» не показано');
+  }).then(w.done, function (e) { w.done(); throw e; });
+});
+
+// ---------- 1.0.6: регулярный платёж (regular.js) ----------
+// Настоящий экран: карточка категории → строка «Регулярный платёж» → своё окно (сумма, свой выбор
+// кошелька, сетка дня) → «Готово» включает и спрашивает разрешение; выключатель выключает, не стирая;
+// вечернее окно: «Записать» - расход тем же путём, что экран суммы; «Ещё нет» - завтра в 20:00;
+// досрочная оплата - окна нет; тап по уведомлению - окно; free - второй платёж только с полным доступом.
+function rpFake(calls, grant) {
+  return {
+    checkPermission: function () { calls.push('check'); return Promise.resolve({ granted: grant.v }); },
+    requestPermission: function () { calls.push('ask'); return Promise.resolve({ granted: grant.v }); },
+    schedule: function (o) { calls.push(o); return Promise.resolve({ ok: true, count: o.events.length }); },
+    openSettings: function () { calls.push('settings'); return Promise.resolve({ ok: true }); },
+    test: function (o) { calls.push(o); return Promise.resolve({ ok: true }); }
+  };
+}
+function rpCat(name) {
+  var c = Engine.addCategory(UI.S, 'exp', { name: name || 'Аренда' });
+  UI.S.icons[c.id] = 'home';
+  return c;
+}
+function rpWallet() { return UI.S.wallets.filter(function (x) { return !x.hidden; })[0]; }
+function rpAt(h, mi, dayShift) {
+  var d = new Date(); d.setHours(h, mi || 0, 0, 0);
+  if (dayShift) d.setDate(d.getDate() + dayShift);
+  return d.getTime();
+}
+function rpTodayDay() { return +Engine.today().slice(8, 10); }
+function rpText(el) { return String(el ? el.textContent : '').replace(/\s+/g, ' ').trim(); }
+function rpFits(what) {
+  var d = document.getElementById('dlg');
+  ok(!d.hidden, what + ': окно не открыто');
+  ok(d.scrollHeight <= d.clientHeight + 1, what + ' прокручивается: ' + d.scrollHeight + ' > ' + d.clientHeight);
+}
+
+// строка в карточке - вход со стрелкой «›» (тест Алексея 23.10: с выключателем её читали как тумблер);
+// вкл/выкл - строкой «Напоминать» в окне настройки. rpToggle: открыть окно, щёлкнуть «Напоминать», «Готово»
+function rpToggle() {
+  document.getElementById('rpRow').click();
+  document.getElementById('rpOn').click();
+  document.getElementById('dlgBtns').lastChild.click();
+  return sleep(120);
+}
+add('1.0.6 регулярный платёж: карточка категории - строка-вход, окно настройки, «Готово» включает, «Напоминать»', function () {
+  var snap = JSON.stringify(UI.S), calls = [], grant = { v: true }, rpAsks = 0;
+  Debts._plugin(rpFake(calls, grant));
+  var c = rpCat('Аренда'), w = rpWallet();
+  Engine.setLimit(UI.S, UI.curYM(), c.id, 35000);
+  UI.save(); UI.render();
+  function done() { Debts._plugin(null); if (window.Picker) Picker.close(); UI.closeDlg(); UI.closeDlg(); UI.hideToast(); UI.S = Engine.migrate(JSON.parse(snap)); UI.save(); UI.renderInstant(); }
+  try {
+    UI.editCat('exp', c.id);
+    rpFits('карточка категории');
+    var row = document.getElementById('rpRow');
+    ok(row, 'в карточке расхода нет строки «Регулярный платёж»');
+    eq(row.getAttribute('data-on'), '0', 'новая категория - платёж не выключен');
+    ok(!row.querySelector('.mi-sw'), 'в строке выключатель - её читают как тумблер');
+    ok(row.querySelector('.set-chev'), 'у строки нет стрелки «›»');
+    eq(rpText(document.getElementById('rpSub')), 'Выключен - нажмите, чтобы настроить', 'подпись выключенной строки');
+    eq(rpText(row.querySelector('.set-t')), 'Регулярный платёж', 'заголовок строки');
+    ok(rpText(document.getElementById('rpSub')).length > 10, 'у выключенной строки нет подписи');
+    // строка стоит под лимитом, над «Убрать в архив»
+    var lim = document.getElementById('ecatLim'), arch = document.getElementById('ecatArch');
+    ok(lim.compareDocumentPosition(row) & 4, 'строка не под «Лимит в месяц»');
+    ok(row.compareDocumentPosition(arch) & 4, 'строка не над «Убрать в архив»');
+    document.getElementById('ecatName').value = 'Аренда квартиры';   // несохранённая правка формы
+    row.click();
+    eq(document.getElementById('dlgTitle').textContent, 'Регулярный платёж', 'тап по строке не открыл окно');
+    ok(!document.getElementById('rpOn'), 'у нового платежа «Напоминать» - включает сам «Готово»');
+    rpFits('окно «Регулярный платёж»');
+    var amt = document.getElementById('rpAmount'), wf = document.getElementById('rpWallet');
+    ok(amt && wf, 'нет полей «Сумма» и «Кошелёк»');
+    ok(wf.tagName === 'BUTTON' && wf.classList.contains('pk-f'), 'кошелёк - не своё окно выбора');
+    ok(!document.querySelector('#dlgBody select, #dlgBody input[type=date]'), 'системный выбор в окне');
+    var ra = amt.getBoundingClientRect(), rw = wf.getBoundingClientRect();
+    ok(Math.abs(ra.top - rw.top) < 2, 'сумма и кошелёк не в одну строку');
+    eq(document.querySelectorAll('#rpDayGrid .dg-d').length, 31, 'сетка дня не 1-31');
+    eq(Engine.parseNum(amt.value), 35000, 'сумма не подставилась из лимита');
+    ok(rpText(document.getElementById('dlgBody')).indexOf('Напомним в 20:00, если до этого не было оплаты.') >= 0, 'нет подсказки про 20:00');
+    // «Готово» без дня - ошибка, окно на месте
+    document.getElementById('dlgBtns').lastChild.click();
+    ok(!document.getElementById('rpErr').hidden, 'без дня оплаты нет ошибки');
+    eq(document.getElementById('dlgTitle').textContent, 'Регулярный платёж', 'без дня окно закрылось');
+    ok(!c.regular, 'без дня платёж сохранился');
+    // кошелёк - своим окном
+    wf.click();
+    ok(window.Picker && Picker.isOpen(), 'выбор кошелька не открылся');
+    document.querySelector('#pk [data-pk-val="' + w.id + '"]').click();
+    eq(wf.value, w.id, 'кошелёк не выбрался');
+    document.querySelector('#rpDayGrid .dg-d[data-day="5"]').click();
+    amt.value = '35000';
+    document.getElementById('dlgBtns').lastChild.click();   // «Готово»
+    return sleep(120).then(function () {
+      eq(document.getElementById('dlgTitle').textContent, 'Категория', '«Готово» не вернул в карточку');
+      eq(document.getElementById('ecatName').value, 'Аренда квартиры', 'несохранённое название потерялось');
+      ok(c.regular && c.regular.on, 'платёж не включился');
+      eq(JSON.stringify([c.regular.amount, c.regular.day, c.regular.walletId]), JSON.stringify([35000, 5, w.id]), 'поля платежа');
+      ok(calls.indexOf('check') >= 0, 'разрешение на уведомления не проверили при включении');
+      var r2 = document.getElementById('rpRow');
+      eq(r2.getAttribute('data-on'), '1', 'строка не «вкл»');
+      var sub = rpText(document.getElementById('rpSub'));
+      ok(/^5-го в 20:00 · 35\s000\s₽ · /.test(sub) && sub.indexOf(w.name) > 0, 'подпись строки: ' + sub);
+      rpFits('карточка со включённым платежом');
+      var sch = calls.filter(function (x) { return x && x.events; });
+      var ev = sch.length ? sch[sch.length - 1].events.filter(function (e) { return e.kind === 'regular'; }) : [];
+      ok(ev.length >= 1, 'план регулярного платежа не ушёл в плагин');
+      ok(ev.every(function (e) { return e.title.indexOf('Аренда') >= 0 && !/\d/.test(e.title + e.text) && new Date(e.at).getHours() === 20; }), 'уведомление с суммой или не в 20:00: ' + JSON.stringify(ev[0]));
+      // «Напоминать» в окне - выключить, настройка хранится
+      document.getElementById('rpRow').click();
+      eq(document.getElementById('rpOn').getAttribute('aria-pressed'), 'true', '«Напоминать» у включённого не «вкл»');
+      rpFits('окно настройки с «Напоминать»');
+      document.getElementById('rpOn').click();
+      document.getElementById('dlgBtns').lastChild.click();
+      return sleep(120);
+    }).then(function () {
+      ok(!c.regular.on && c.regular.amount === 35000 && c.regular.day === 5, 'выключение стёрло настройку или не выключило');
+      eq(document.getElementById('dlgTitle').textContent, 'Категория', 'после выключения не вернулись в карточку');
+      eq(document.getElementById('rpRow').getAttribute('data-on'), '0', 'строка после выключения');
+      ok(!Engine.reminderPlan(UI.S, Date.now(), 12).some(function (e) { return e.kind === 'regular'; }), 'выключен, а в плане');
+      // включить обратно - той же строкой «Напоминать», настройка та же
+      return rpToggle();
+    }).then(function () {
+      ok(c.regular.on && c.regular.amount === 35000, '«Напоминать» не включил сохранённый платёж');
+      // уведомления запрещены - честно в подписи; выключатель показывает настоящее «вкл» и
+      // выключает (ревью «сломать» Н1); «Открыть настройки» - в окне настройки платежа (Н3)
+      grant.v = false;
+      UI.S.ui.remindDenied = true;   // мягкое окно «Напоминания не придут» здесь не проверяем
+      return Debts.askPerm();
+    }).then(function () {
+      UI.editCat('exp', c.id);
+      ok(/запрещены/.test(rpText(document.getElementById('rpSub'))), 'запрет уведомлений не виден в строке');
+      eq(document.getElementById('rpRow').getAttribute('data-on'), '1', 'при запрете включённый платёж показан выключенным');
+      ok(!document.getElementById('rpPerm'), 'кнопка «Открыть настройки» в карточке (не влезает в 360x640)');
+      rpAsks = calls.filter(function (x) { return x === 'ask'; }).length;
+      return rpToggle();
+    }).then(function () {
+      ok(!c.regular.on, 'при запрете уведомлений платёж не выключается');
+      eq(calls.filter(function (x) { return x === 'ask'; }).length, rpAsks, 'выключение спросило разрешение');
+      return rpToggle();
+    }).then(function () {
+      ok(c.regular.on, 'при запрете уведомлений платёж не включается');
+      return sleep(60);
+    }).then(function () {
+      ok(calls.filter(function (x) { return x === 'ask'; }).length >= 1, 'включение при запрете не спросило разрешение');
+      document.getElementById('rpRow').click();
+      eq(document.getElementById('dlgTitle').textContent, 'Регулярный платёж', 'окно настройки не открылось');
+      ok(document.getElementById('rpPerm'), 'в окне настройки нет «Открыть настройки»');
+      ok(rpText(document.getElementById('dlgBody')).indexOf(Regular.PERM_HINT) >= 0, 'в окне настройки нет строки про запрет');
+      document.getElementById('rpPerm').click();
+      ok(calls.indexOf('settings') >= 0, 'настройки не открылись');
+      document.getElementById('dlgBtns').firstChild.click();   // «Отмена» - обратно в карточку
+      // сохранение категории не трогает платёж
+      document.getElementById('dlgBtns').lastChild.click();
+      ok(c.regular && c.regular.on, '«Сохранить» карточки сбросил платёж');
+      done();
+    });
+  } catch (e) { done(); throw e; }
+});
+
+add('1.0.6 регулярный платёж: вечернее окно - «Записать» пишет расход тем же путём, не дважды за открытие', function () {
+  var snap = JSON.stringify(UI.S);
+  var c = rpCat('Аренда'), w = rpWallet();
+  Engine.setRegular(UI.S, c.id, { amount: 35000, day: rpTodayDay(), walletId: w.id }, rpAt(12, 0));
+  UI.save(); UI.render(); Regular._reset();
+  var fired = [], g0 = window.Glow && window.Glow.fire;
+  if (window.Glow) window.Glow.fire = function (k) { fired.push(k); };
+  function done() { if (window.Glow) window.Glow.fire = g0; UI.closeDlg(); UI.hideToast(); UI.S = Engine.migrate(JSON.parse(snap)); UI.save(); UI.renderInstant(); }
+  try {
+    ok(!Regular.check(rpAt(19, 59)), 'окно до 20:00');
+    ok(Regular.check(rpAt(20, 30)), 'окна нет в 20:30 дня оплаты');
+    eq(document.getElementById('dlgTitle').textContent, 'Аренда - сегодня день оплаты', 'заголовок окна');
+    eq(rpText(document.getElementById('rpQ')), '35 000 ₽ с кошелька «' + w.name + '». Записать платёж?', 'текст окна');
+    ok(document.getElementById('rpQ').textContent.indexOf('35\u00a0000\u00a0₽') >= 0, 'сумма рвётся по разрядам (не NBSP)');
+    var hint = rpText(document.querySelector('#dlgBody .rp-hint'));
+    var last = Engine.dueDate(Engine.today().slice(0, 7), 31) === Engine.today();
+    eq(hint, last ? 'Записывайте, только если уже заплатили.' : 'Записывайте, только если уже заплатили. Не оплатили - нажмите «Ещё нет», завтра вечером напомним снова.', 'подсказка');
+    var bs = document.getElementById('dlgBtns').children;
+    eq(bs.length + ':' + bs[0].textContent + ':' + bs[1].textContent, '2:Ещё нет:Записать', 'кнопки окна');
+    rpFits('вечернее окно');
+    // поверх открытого окна - не всплывает; закрыли фоном - за это открытие больше нет
+    ok(!Regular.check(rpAt(20, 31)), 'второе окно поверх первого');
+    UI.closeDlg();
+    ok(!Regular.check(rpAt(20, 32)), 'окно дважды за одно открытие');
+    // экран суммы открыт - не всплывает
+    Regular._reset();
+    UI.openAmount({ kind: 'exp', catId: c.id, walletId: w.id });
+    ok(!Regular.check(rpAt(20, 33)), 'окно поверх экрана суммы');
+    UI.closeAmount();
+    ok(Regular.check(rpAt(20, 34)), 'после закрытия экрана суммы окно не показалось');
+    var n0 = UI.S.tx.length, b0 = Engine.walletBalance(UI.S, w.id);
+    document.getElementById('dlgBtns').lastChild.click();   // «Записать»
+    eq(UI.S.tx.length, n0 + 1, '«Записать» не записал операцию');
+    var t = UI.S.tx[UI.S.tx.length - 1];
+    eq(JSON.stringify([t.kind, t.catId, t.walletId, t.amount, t.date]), JSON.stringify(['exp', c.id, w.id, 35000, Engine.today()]), 'поля операции');
+    eq(Engine.walletBalance(UI.S, w.id), b0 - 35000, 'кошелёк не уменьшился');
+    ok(document.getElementById('dlg').hidden, 'окно не закрылось после записи');
+    ok(!document.getElementById('toast').hidden && document.getElementById('toastBtn').textContent === 'Отменить', 'нет тоста «Отменить» (путь экрана суммы)');
+    if (window.Glow) ok(fired.length >= 1, 'подсветка не позвана (путь экрана суммы)');
+    eq(Engine.regularPending(UI.S, rpAt(20, 40)).length, 0, 'записан, а окно снова');
+    Regular._reset();
+    ok(!Regular.check(rpAt(21, 0)), 'после записи окно снова');
+    // «Отменить» в тосте - операция ушла, окно снова положено
+    document.getElementById('toastBtn').click();
+    eq(UI.S.tx.length, n0, '«Отменить» не убрал платёж');
+    eq(Engine.regularPending(UI.S, rpAt(21, 0)).length, 1, 'после «Отменить» платёж считается записанным');
+    done();
+  } catch (e) { done(); throw e; }
+});
+
+add('1.0.6 регулярный платёж: «Ещё нет» - завтра в 20:00; досрочная оплата - ни окна, ни уведомления', function () {
+  var snap = JSON.stringify(UI.S);
+  var c = rpCat('Аренда'), w = rpWallet();
+  Engine.setRegular(UI.S, c.id, { amount: 35000, day: rpTodayDay(), walletId: w.id }, rpAt(12, 0));
+  UI.save(); UI.render(); Regular._reset();
+  function done() { UI.closeDlg(); UI.hideToast(); UI.S = Engine.migrate(JSON.parse(snap)); UI.save(); UI.renderInstant(); }
+  try {
+    var last = Engine.dueDate(Engine.today().slice(0, 7), 31) === Engine.today();
+    ok(Regular.check(rpAt(20, 5)), 'окна нет');
+    var n0 = UI.S.tx.length;
+    document.getElementById('dlgBtns').firstChild.click();   // «Ещё нет»
+    eq(UI.S.tx.length, n0, '«Ещё нет» записал платёж');
+    ok(document.getElementById('dlg').hidden, '«Ещё нет» не закрыл окно');
+    var tomorrow = new Date(rpAt(12, 0, 1)), tStr = tomorrow.getFullYear() + '-' + ('0' + (tomorrow.getMonth() + 1)).slice(-2) + '-' + ('0' + tomorrow.getDate()).slice(-2);
+    eq(c.regular.snooze, tStr, '«Ещё нет» не отложил на завтра');
+    eq(rpText(document.getElementById('toastText')), last ? 'В этом месяце больше не напомним' : 'Напомним завтра в 20:00', 'тост «Ещё нет»');
+    Regular._reset();
+    ok(!Regular.check(rpAt(22, 0)), 'после «Ещё нет» окно в тот же вечер');
+    var plan = Engine.reminderPlan(UI.S, rpAt(20, 6), 2).filter(function (e) { return e.kind === 'regular'; });
+    if (!last) {
+      eq(plan[0] && plan[0].at, rpAt(20, 0, 1), 'нет уведомления завтра в 20:00');
+      eq(Engine.regularPending(UI.S, rpAt(19, 59, 1)).length, 0, 'завтра окно раньше 20:00');
+      eq(Engine.regularPending(UI.S, rpAt(20, 0, 1)).length, 1, 'завтра в 20:00 окна нет');
+    } else ok(!plan.length || plan[0].at > rpAt(23, 59, 1), 'в последний день месяца «Ещё нет» поставил напоминание на завтра');
+    // досрочно: один расход не меньше 90% суммы в этом месяце
+    Engine.setRegular(UI.S, c.id, { amount: 35000, day: rpTodayDay(), walletId: w.id }, rpAt(12, 0));   // сброс «Ещё нет»
+    UI.S.tx.push({ id: 'rp-early', kind: 'exp', amount: 31500, date: Engine.today().slice(0, 8) + '01', ts: 1, catId: c.id, walletId: w.id, toWalletId: null });
+    UI.save(); UI.render(); Regular._reset();
+    ok(!Regular.check(rpAt(20, 30)), 'оплачен досрочно, а окно');
+    ok(!Engine.reminderPlan(UI.S, rpAt(12, 0), 1).some(function (e) { return e.kind === 'regular'; }), 'оплачен досрочно, а уведомление');
+    eq(Debts.openFromReminder(c.id, Engine.today()), 'none', 'тап по уведомлению оплаченного - окно');
+    ok(document.getElementById('dlg').hidden, 'тап по уведомлению оплаченного открыл окно');
+    done();
+  } catch (e) { done(); throw e; }
+});
+
+add('1.0.6 регулярный платёж: тап по уведомлению - окно; кошелёк скрыт - ничего не ломается; free - второй через «Полный доступ»', function () {
+  var snap = JSON.stringify(UI.S), h0 = UI.hasFullAccess, p0 = UI.paywall, why = null;
+  var c = rpCat('Аренда'), c2 = rpCat('Подписки'), w = rpWallet();
+  Engine.setRegular(UI.S, c.id, { amount: 1200, day: rpTodayDay(), walletId: w.id }, rpAt(12, 0));
+  UI.save(); UI.render(); Regular._reset();
+  function done() { UI.hasFullAccess = h0; UI.paywall = p0; UI.closeDlg(); UI.hideToast(); UI.S = Engine.migrate(JSON.parse(snap)); UI.save(); UI.renderInstant(); }
+  try {
+    var now = new Date();
+    if (now.getHours() >= 20) {
+      eq(Debts.openFromReminder(c.id, Engine.today()), 'window', 'тап по уведомлению не открыл окно');
+      eq(document.getElementById('dlgTitle').textContent, 'Аренда - сегодня день оплаты', 'тап: заголовок');
+      UI.closeDlg();
+    } else {
+      // до 20:00 тап (будильник неточный - до 10 минут раньше) окно не открывает
+      ok(Debts.openFromReminder(c.id, Engine.today()) !== 'window' || now.getHours() === 19, 'тап задолго до 20:00 открыл окно');
+      UI.closeDlg();
+    }
+    // окно поверх открытой карточки: тап закрывает слои и показывает своё (как у долгов)
+    Regular._reset();
+    eq(Regular.fromTap('нет-такой', Engine.today()), false, 'тап по чужому id');
+    // кошелёк скрыт - окна нет, карточка открывается, строка просит выбрать кошелёк
+    w.hidden = true; UI.save(); UI.render();
+    ok(!Regular.check(rpAt(23, 0)), 'кошелёк скрыт, а окно');
+    UI.editCat('exp', c.id);
+    ok(/Кошелёк удалён или скрыт/.test(rpText(document.getElementById('rpSub'))), 'строка не просит выбрать кошелёк');
+    UI.closeDlg();
+    w.hidden = false; UI.save(); UI.render();
+    // free: второй регулярный платёж - окно «Полный доступ» с причиной
+    UI.hasFullAccess = function () { return false; };
+    UI.paywall = function (back, msg) { why = msg; };
+    UI.editCat('exp', c2.id);
+    ok(document.querySelector('#rpRow .set-lock'), 'на второй строке в free нет замка');
+    document.getElementById('rpRow').click();
+    eq(why, 'В бесплатной версии - один регулярный платёж.', 'free: нет окна «Полный доступ» с причиной');
+    ok(!c2.regular, 'free: второй платёж включился');
+    // уже включённый - править можно и в free (созданное не блокируем)
+    why = null;
+    UI.editCat('exp', c.id);
+    document.getElementById('rpRow').click();
+    eq(document.getElementById('dlgTitle').textContent, 'Регулярный платёж', 'free: свой платёж не открывается');
+    eq(why, null, 'free: на свой платёж - пейволл');
+    UI.closeDlg(); UI.closeDlg();
+    // настоящий пейволл показывает причину строкой сверху
+    UI.paywall = p0;
+    UI.paywall(null, Regular.WHY_FREE);
+    eq(rpText(document.getElementById('pwWhy')), 'В бесплатной версии - один регулярный платёж.', 'в окне «Полный доступ» нет причины');
+    UI.closeDlg();
+    // полный доступ - второй можно
+    UI.hasFullAccess = function () { return true; };
+    UI.editCat('exp', c2.id);
+    document.getElementById('rpRow').click();
+    eq(document.getElementById('dlgTitle').textContent, 'Регулярный платёж', 'полный доступ: второй не открывается');
+    done();
+  } catch (e) { done(); throw e; }
+});
+
+// Проход по USB 23.10: С1 «Отмена» в подтверждениях архива/скрытия/удаления - назад в карточку
+// (было: на главный); С3 ошибка «Выберите день оплаты» гаснет при выборе дня; С2 дефис не в начале строки
+add('1.0.6 проход по USB: «Отмена» - назад в карточку, ошибка дня гаснет, дефис не переносится', function () {
+  function title() { return document.getElementById('dlgTitle').textContent; }
+  function btn(label) { var b = null; [].forEach.call(document.querySelectorAll('#dlgBtns button'), function (x) { if (x.textContent.trim() === label) b = x; }); return b; }
+  var c = Engine.listCategories(UI.S, 'exp', { ymStr: UI.curYM() })[0];
+  var w = UI.S.wallets.filter(function (x) { return !x.hidden; })[0];
+  try {
+    UI.editCat('exp', c.id, false);
+    document.getElementById('ecatName').value = c.name + ' черновик';
+    document.getElementById('ecatArch').click();
+    eq(title(), 'В архив?', 'нет подтверждения архива');
+    btn('Отмена').click();
+    eq(title(), 'Категория', '«Отмена» в архиве не вернула в карточку');
+    eq(document.getElementById('ecatName').value, c.name + ' черновик', 'черновик названия потерян');
+    ok(!Engine.findCategory(UI.S, c.id).cat.archived, 'категория ушла в архив после «Отмены»');
+    UI.closeDlg();
+    UI.editWallet(w.id, false);
+    document.getElementById('ecDel').click();
+    ok(/Удалить|нельзя/.test(title()), 'нет подтверждения удаления кошелька: ' + title());
+    btn('Отмена').click();
+    ok(!document.getElementById('dlg').hidden && !!document.getElementById('ecDel'), '«Отмена» в удалении кошелька не вернула в форму');
+    ok(!!Engine.findWallet(UI.S, w.id), 'кошелёк удалён после «Отмены»');
+    UI.closeDlg();
+    window.Regular.openSetup(c.id, function () { UI.closeDlg(); });
+    var day = document.getElementById('rpDay'); day.value = '';
+    [].forEach.call(document.querySelectorAll('#rpDayGrid .dg-d.on'), function (x) { x.classList.remove('on'); });
+    document.getElementById('rpAmount').value = '500';
+    btn('Готово').click();
+    var er = document.getElementById('rpErr');
+    if (er && !er.hidden && er.textContent === 'Выберите день оплаты') {
+      document.querySelector('#rpDayGrid [data-day="10"]').click();
+      ok(er.hidden, 'ошибка «Выберите день оплаты» не погасла после выбора дня');
+    }
+    UI.closeDlg();
+    ok(/Не оплатили\u00a0- нажмите/.test(window.Regular.ASK_HINT || ''), 'в подсказке вечернего окна дефис может уйти в начало строки');
+  } finally { UI.closeDlg(); UI.render(); }
 });
 
 // ---------- прогон ----------

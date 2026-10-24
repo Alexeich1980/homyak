@@ -36,15 +36,23 @@ public class ReminderReceiver extends BroadcastReceiver {
     // Будильник опоздал (телефон был выключен) - показываем, если с даты прошло не больше
     // 20 часов: «Сегодня платёж» к вечеру ещё уместно, вчерашнее - уже нет.
     static final long LATE_MAX = 20L * 3600 * 1000;
+    // 1.0.6 (ревью «сломать» Н7): регулярный платёж приходит в 20:00 с «Сегодня день оплаты» -
+    // опоздание дольше 4 часов уже на следующий день, такое уведомление не показываем
+    // (окно «Записать платёж?» в приложении всё равно предложит записать)
+    static final long LATE_MAX_REGULAR = 4L * 3600 * 1000;
     // Неточный будильник может сработать чуть раньше - событие в пределах минуты считаем наступившим.
     static final long EARLY = 60L * 1000;
     // что видно на экране блокировки вместо названия долга
     static final String PUBLIC_TITLE = "Напоминание о платеже по долгу";
     // у кредитки своя общая строка (без названия карты); вид - поле kind события плана
     static final String PUBLIC_TITLE_CARD = "Напоминание о платеже по кредитной карте";
+    // 1.0.6: регулярный платёж категории (аренда, подписки) - тоже без названия на экране блокировки
+    static final String PUBLIC_TITLE_REGULAR = "Напоминание о регулярном платеже";
 
-    // kind из плана (engine.js reminderPlan, debts.js testCardReminder): "credit" - кредитка
+    // kind из плана (engine.js reminderPlan, debts.js testCardReminder): "credit" - кредитка,
+    // "regular" - регулярный платёж (тап отдаёт id категории, regular.js fromTap)
     static String publicTitle(String kind) {
+        if ("regular".equals(kind)) return PUBLIC_TITLE_REGULAR;
         return "credit".equals(kind) ? PUBLIC_TITLE_CARD : PUBLIC_TITLE;
     }
     // план, сохранённый до этой правки, без kind: вид по заголовку (там «кредитной карты»)
@@ -90,7 +98,8 @@ public class ReminderReceiver extends BroadcastReceiver {
                 if (e == null) continue;
                 long at = e.optLong("at", 0);
                 if (at > now + EARLY) { rest.put(e); continue; }
-                if (now - at <= LATE_MAX) {
+                long lateMax = "regular".equals(kindOf(e)) ? LATE_MAX_REGULAR : LATE_MAX;
+                if (now - at <= lateMax) {
                     // id события плана: «<id долга>|<дата срока>|b/d»; у проверки - поле debt
                     String id = e.optString("id", "r"), debt = e.optString("debt", ""), due = "";
                     String[] p = id.split("\\|");
@@ -136,9 +145,11 @@ public class ReminderReceiver extends BroadcastReceiver {
     static void ensureChannel(Context ctx) {
         if (Build.VERSION.SDK_INT < 26) return;
         NotificationManager nm = (NotificationManager) ctx.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (nm == null || nm.getNotificationChannel(CHANNEL) != null) return;
-        NotificationChannel ch = new NotificationChannel(CHANNEL, "Платежи по долгам", NotificationManager.IMPORTANCE_DEFAULT);
-        ch.setDescription("Напоминания за день до платежа и в день платежа");
+        if (nm == null) return;
+        // 1.0.6: канал общий для долгов, кредиток и регулярных платежей. Имя и описание канала
+        // Android разрешает обновлять повторным созданием (важность и звук хозяина не трогает)
+        NotificationChannel ch = new NotificationChannel(CHANNEL, "Напоминания о платежах", NotificationManager.IMPORTANCE_DEFAULT);
+        ch.setDescription("Платежи по долгам, кредитным картам и регулярные платежи");
         nm.createNotificationChannel(ch);
     }
 

@@ -40,7 +40,7 @@ test('разрешения напоминаний описаны в полити
   const pr = rd('legal/privacy.html');
   assert.match(pr, /POST_NOTIFICATIONS/);
   assert.match(pr, /RECEIVE_BOOT_COMPLETED - если включены\s+напоминания/);
-  assert.match(pr, /Редакция от 15\.10\.2026/);
+  assert.match(pr, /Редакция от (15|22)\.10\.2026/);   // 22.10: + регулярные платежи (1.0.6)
   assert.match(pr, /кредитным картам/);   // 15.10: напоминания и по кредитке
   assert.match(pr, /без сумм/);
   const home = os.homedir();

@@ -195,10 +195,11 @@ test('RuStore-адаптер: status нормализует ответ; restore 
   const mk = (res) => Pay.createRuStorePayment({
     async purchase() { return {}; }, async getPurchases() { return res; }, async getProducts() { return {}; }
   });
+  const NOPEND = { pending: false, pendingId: null, pendingAgeMs: null };
   assert.deepEqual(await mk({ owned: true, authorized: true }).status(),
-    { owned: true, revoked: false, authorized: true, unavailable: false });
+    Object.assign({ owned: true, revoked: false, authorized: true, unavailable: false, ackId: null }, NOPEND));
   assert.deepEqual(await mk({ owned: 'yes' }).status(),
-    { owned: false, revoked: false, authorized: false, unavailable: false }, 'строка вместо true открыла Pro');
+    Object.assign({ owned: false, revoked: false, authorized: false, unavailable: false, ackId: null }, NOPEND), 'строка вместо true открыла Pro');
   const r = await mk({ owned: false, unavailable: true }).restore();
   assert.equal(r.unavailable, true);
   assert.equal(Pay.restoreGrantsPro(r), false);
@@ -208,15 +209,17 @@ test('RuStore-адаптер: status нормализует ответ; restore 
 test('покупка: отмена/ошибка/сбой моста не выдают Pro; «деньги не списаны» не обещаем; двойной тап', () => {
   const s = rd('www/purchase.js');
   assert.equal(s.indexOf('деньги не списаны'), -1);
-  assert.ok(/if \(window\.Pay\.purchaseGrantsPro\(r\)\)/.test(s), 'Pro не через purchaseGrantsPro');
-  // markPurchased зовётся только из grantAndCelebrate, а он - только после *GrantsPro
+  // 1.0.6 (ревью кода max): успех шторки - только через purchaseGrantsPro (ok === true строго)
+  assert.ok(/if \(r\.status === 'ok' && P\(\)\.purchaseGrantsPro\(r\)\)/.test(s), 'Pro не через purchaseGrantsPro');
+  // markPurchased - только в grant() (подтверждение магазина: итог шторки, снимок owned, ответ checkPurchase 'ok');
+  // поведение - tests/purchase-106.test.js и tests/pay-review-106.test.js
   const marks = s.match(/markPurchased\(/g) || [];
   assert.equal(marks.length, 1);
-  const calls = s.match(/grantAndCelebrate\('/g) || [];
-  assert.equal(calls.length, 2);
-  assert.ok(/\.catch\(function \(\) \{\s*buying = false;\s*failDlg\(onClose\);/.test(s), 'сбой моста молча закрывает окно');
-  assert.ok(/if \(buying\) return;/.test(s), 'двойной тап откроет вторую шторку');
-  assert.ok(/if \(r && r\.unavailable\) \{ notConfiguredDlg/.test(s), 'restore при заглушке говорит «не найдена»');
+  assert.ok(/\.then\(null, function \(\) \{ return \{ status: 'error' \}; \}\)/.test(s), 'сбой моста молча закрывает окно');
+  assert.ok(/if \(S\) return Promise\.resolve\(BUSY\);/.test(s), 'двойной тап откроет вторую шторку');
+  assert.ok(/if \(sn\.unavailable\) return done\(s, res\('notconfigured'\)\);/.test(s), 'restore при заглушке говорит «не найдена»');
+  // таймера «зависания» больше нет: шторку не «отпускаем» (память android-app-build-checklist п.14)
+  assert.ok(!/stuckMs|graceMs|rescue|released/.test(s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')), 'вернулось угадывание судьбы шторки в JS');
 });
 
 test('нативный плагин: клиент SDK - getInstance (провайдер уже создал), unavailable при заглушке, refund', () => {
@@ -336,7 +339,7 @@ test('приватный ключ лицензий не в бандле и не 
 test('пейволл: строки RuStore, НЕТ ссылок/адресов/контактов, дефис вместо «—»', () => {
   const s = rd('www/edit.js');
   const pw = s.slice(s.indexOf('function paywall'), s.indexOf('function bindRestore'));
-  assert.ok(pw.indexOf('Уже есть ключ? Активируйте его') >= 0);
+  assert.ok(pw.indexOf('>Есть ключ<') >= 0);
   assert.ok(pw.indexOf('Лицензионный ключ приобретается отдельно, вне приложения.') >= 0);
   assert.ok(pw.indexOf("'Купить в RuStore - ' + FULL_PRICE") >= 0);
   assert.ok(pw.indexOf('Восстановить покупку') >= 0);

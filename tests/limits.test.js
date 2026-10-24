@@ -230,3 +230,9 @@ test('carryLimits: месяц со своими лимитами помечае�
   assert.strictEqual(Engine.carryLimits(S, '2026-10'), 0, 'лимиты сентября вернулись после удаления');
   assert.strictEqual(S.limits['2026-10'], undefined);
 });
+
+// Алексей 23.10: «Скопировать лимиты прошлого месяца» дублировала автоперенос (carryLimits) - кнопки нет
+test('в «Настроить категории» нет кнопки «Скопировать лимиты/планы прошлого месяца»', () => {
+  const s = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'www', 'edit.js'), 'utf8');
+  assert.equal(/Скопировать (лимиты|планы) прошлого месяца|id="clCopy"/.test(s), false, 'вернулась кнопка-дубль автопереноса лимитов');
+});

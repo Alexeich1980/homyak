@@ -25,8 +25,8 @@ android {
         applicationId "ru.dorokhin.homyak"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 20011
-        versionName "1.0.5"
+        versionCode 20013
+        versionName "1.0.6"
         if (homyakTest) applicationIdSuffix ".test"
         manifestPlaceholders = [
             appLabel : homyakTest ? 'Хомяк тест' : '@string/app_name',

@@ -11,6 +11,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const cp = require('node:child_process');
+const reaper = require('./edge-reaper.js');
 
 const EDGE_PATHS = [
   process.env.EDGE_PATH,
@@ -83,23 +84,34 @@ class Page {
 async function launchEdge() {
   const exe = edgePath();
   if (!exe) throw new Error('Edge не найден');
+  // сироты Edge от тестов, убитых по таймауту (их finally не выполнился), - погасить по PID до своего запуска
+  reaper.sweepOnce();
+  // Подмести профили прошлых прогонов старше 15 минут: Edge держит файлы после kill, и rmSync в конце молча
+  // не срабатывает - за сутки в Temp набиралось 4-6 ГБ (22.10.2026). Свежие (параллельный прогон) не трогаем.
+  for (const n of fs.readdirSync(os.tmpdir())) {
+    if (!n.startsWith('homyak-edge-')) continue;
+    const old = path.join(os.tmpdir(), n);
+    try { if (Date.now() - fs.statSync(old).mtimeMs > 15 * 60e3) fs.rmSync(old, { recursive: true, force: true }); } catch (e) { /* занят */ }
+  }
   const prof = fs.mkdtempSync(path.join(os.tmpdir(), 'homyak-edge-'));
   const proc = cp.spawn(exe, ['--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-sync',
-    '--remote-debugging-port=0', '--user-data-dir=' + prof, 'about:blank'], { stdio: 'ignore' });
+    // RELAUNCH_FLAG: без него Edge перезапускает сам себя, наш PID сразу мёртв, и kill не достаёт дерево (22.10.2026)
+    '--remote-debugging-port=0', '--user-data-dir=' + prof, reaper.RELAUNCH_FLAG, 'about:blank'], { stdio: 'ignore' });
+  reaper.track(proc, prof); // процесс теста выйдет/получит Ctrl+C - дерево Edge гасится и тогда
   const portFile = path.join(prof, 'DevToolsActivePort');
   let port;
   try {
     port = await waitFor(() => fs.existsSync(portFile) && parseInt(fs.readFileSync(portFile, 'utf8').split('\n')[0], 10), 20000, 'порт отладки Edge');
   } catch (e) {
     // Edge не поднялся - не оставляем висящий процесс и папку профиля
-    try { proc.kill(); } catch (x) {}
+    reaper.killTree(proc.pid);
     try { fs.rmSync(prof, { recursive: true, force: true }); } catch (x) {}
     throw e;
   }
   const base = 'http://127.0.0.1:' + port;
   const pages = [];
   return {
-    port,
+    port, prof, pid: proc.pid,
     async open(url, o) {
       o = o || {};
       const t = await (await fetch(base + '/json/new?about:blank', { method: 'PUT' })).json();
@@ -120,11 +132,13 @@ async function launchEdge() {
     async close() {
       pages.forEach((p) => p.close());
       const exited = new Promise((res) => { if (proc.exitCode !== null) res(); else proc.once('exit', res); });
-      try { proc.kill(); } catch (e) {}
+      // proc.kill() бил в PID, который Edge уже покинул при перезапуске, - дерево msedge оставалось жить (22.10.2026)
+      if (proc.exitCode === null && proc.signalCode === null) reaper.killTree(proc.pid);
       await Promise.race([exited, sleep(5000)]);
-      // на Windows папка профиля освобождается не сразу после выхода процесса
+      // на Windows папка профиля освобождается не сразу после выхода процесса; не отпускается дольше секунды -
+      // её держит хвост дерева, рождённый в момент taskkill: добить его по PID
       for (let i = 0; i < 10; i++) {
-        try { fs.rmSync(prof, { recursive: true, force: true }); break; } catch (e) { await sleep(300); }
+        try { fs.rmSync(prof, { recursive: true, force: true }); break; } catch (e) { if (i === 3) reaper.killProfile(prof); await sleep(300); }
       }
     }
   };
